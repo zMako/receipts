@@ -1,0 +1,330 @@
+{
+  "cli_version": "0.11.3",
+  "checkpoint_id": "01M420KDD44M6C76DYAGFJ6P1B",
+  "session_id": "eef042f6-784b-443d-8d36-2b3ce897e58f",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-03T23:11:49.465537Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "save_step_count": 2,
+  "files_touched": [
+    "apps/exhibit/src/inspector.ts",
+    "apps/exhibit/src/main.ts",
+    "apps/exhibit/src/panel.ts",
+    "apps/exhibit/src/scene.ts",
+    "apps/exhibit/src/state.ts",
+    "apps/exhibit/src/styles.css",
+    "apps/server/scripts/agents/standalone-server.ts",
+    "apps/server/src/index.ts",
+    "apps/server/src/verify/classifyRequest.ts",
+    "apps/server/src/verify/index.ts",
+    "apps/server/src/verify/router.ts",
+    "apps/server/src/verify/webBotAuth.ts",
+    "apps/server/src/warroom/band-bridge.ts",
+    "apps/server/src/warroom/cases.ts",
+    "apps/server/src/warroom/routes.ts",
+    "apps/server/src/warroom/stripe.ts",
+    "apps/server/src/warroom/tools.ts",
+    "apps/server/src/zoowork.ts",
+    "packages/seed/src/generate.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5-1",
+  "turn_id": "cc4fceb0054e",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 4250,
+    "cache_creation_tokens": 675881,
+    "cache_read_tokens": 55060800,
+    "output_tokens": 349014,
+    "api_call_count": 177,
+    "subagent_tokens": {
+      "input_tokens": 652,
+      "cache_creation_tokens": 208195,
+      "cache_read_tokens": 4151538,
+      "output_tokens": 18783,
+      "api_call_count": 25
+    }
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01686mZoP9G62Erz1EugLwes",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "anthropic-skills:pptx"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4b4f4ecc2ac9",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 36,
+        "end": 37,
+        "entry_ids": [
+          "c3d53159-c411-44d5-a31d-cda30f5cd6f9"
+        ],
+        "tool_use_id": "toolu_01686mZoP9G62Erz1EugLwes"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01686mZoP9G62Erz1EugLwes"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: anthropic-skills:pptx",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01GaC19JKQ4Cv3Az8Aiyv7ub",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "anthropic-skills:deep-research"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4b4f4ecc2ac9",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 107,
+        "end": 108,
+        "entry_ids": [
+          "7a51422c-174b-4874-aacd-af26ed318738"
+        ],
+        "tool_use_id": "toolu_01GaC19JKQ4Cv3Az8Aiyv7ub"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01GaC19JKQ4Cv3Az8Aiyv7ub"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: anthropic-skills:deep-research",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_0118FLFf8MGZJA9ggv4GkTDX",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "impeccable"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1344,
+        "end": 1345,
+        "entry_ids": [
+          "45b6f0ed-0571-463c-a8eb-a38353c745c8"
+        ],
+        "tool_use_id": "toolu_0118FLFf8MGZJA9ggv4GkTDX"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_0118FLFf8MGZJA9ggv4GkTDX"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: impeccable",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01457qQvaP1mQd61ErVibyVu",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "frontend-design"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1348,
+        "end": 1349,
+        "entry_ids": [
+          "3e8fe144-203f-4574-aae1-33c6816b3ac7"
+        ],
+        "tool_use_id": "toolu_01457qQvaP1mQd61ErVibyVu"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01457qQvaP1mQd61ErVibyVu"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: frontend-design",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01TeDrGVemrAoKfVdje7Snbj",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "design-taste-frontend"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1352,
+        "end": 1353,
+        "entry_ids": [
+          "64b387d1-940d-47fc-8ab8-1888edd00adc"
+        ],
+        "tool_use_id": "toolu_01TeDrGVemrAoKfVdje7Snbj"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01TeDrGVemrAoKfVdje7Snbj"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: design-taste-frontend",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_015oPvYyxKFAtpM9ChAGptbE",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "high-end-visual-design"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1356,
+        "end": 1357,
+        "entry_ids": [
+          "f371dd6e-9ca3-4229-bd43-17706e3f823a"
+        ],
+        "tool_use_id": "toolu_015oPvYyxKFAtpM9ChAGptbE"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_015oPvYyxKFAtpM9ChAGptbE"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: high-end-visual-design",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_019sNTdiykkoBWiC4isro3ZR",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "ui-ux-pro-max"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1360,
+        "end": 1361,
+        "entry_ids": [
+          "a28c1e93-b549-4dc0-969f-d5fa01bb68aa"
+        ],
+        "tool_use_id": "toolu_019sNTdiykkoBWiC4isro3ZR"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_019sNTdiykkoBWiC4isro3ZR"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: ui-ux-pro-max",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 15
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-03T23:11:49.144511Z",
+    "agent_lines": 0,
+    "agent_removed": 96,
+    "human_added": 171,
+    "human_modified": 3763,
+    "human_removed": 0,
+    "total_committed": 771,
+    "total_lines_changed": 7772,
+    "agent_percentage": 1.2352032938754505,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 36,
+      "user_lines_removed": 12,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7,
+        "apps/server/src/verify/index.ts": 3,
+        "apps/server/src/verify/router.ts": 26
+      },
+      "user_removed_per_file": {
+        "apps/server/src/verify/index.ts": 3,
+        "apps/server/src/verify/router.ts": 9
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 3771,
+      "user_lines_removed": 3746,
+      "agent_lines_added": 634,
+      "agent_lines_removed": 112,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7,
+        "apps/exhibit/src/main.ts": 2,
+        "apps/exhibit/src/state.test.ts": 35,
+        "apps/server/src/routes.ts": 2,
+        "apps/server/src/store.ts": 7,
+        "packages/seed/data/dataset.json": 3702,
+        "packages/seed/src/generate.ts": 3,
+        "packages/seed/src/replay.ts": 5,
+        "packages/seed/src/vault.ts": 8
+      },
+      "user_removed_per_file": {
+        "apps/exhibit/src/main.ts": 1,
+        "apps/exhibit/src/state.test.ts": 2,
+        "apps/server/src/routes.ts": 1,
+        "apps/server/src/store.ts": 1,
+        "packages/seed/data/dataset.json": 3728,
+        "packages/seed/src/generate.ts": 3,
+        "packages/seed/src/replay.ts": 5,
+        "packages/seed/src/vault.ts": 5
+      }
+    }
+  ]
+}

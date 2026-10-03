@@ -1,0 +1,51 @@
+{
+  "cli_version": "0.11.3",
+  "checkpoint_id": "01M420KDD44M6C76DYAGFJ6P1B",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/exhibit/src/inspector.ts",
+    "apps/exhibit/src/main.ts",
+    "apps/exhibit/src/panel.ts",
+    "apps/exhibit/src/scene.ts",
+    "apps/exhibit/src/state.ts",
+    "apps/exhibit/src/styles.css",
+    "apps/server/scripts/agents/standalone-server.ts",
+    "apps/server/src/index.ts",
+    "apps/server/src/verify/classifyRequest.ts",
+    "apps/server/src/verify/index.ts",
+    "apps/server/src/verify/router.ts",
+    "apps/server/src/verify/webBotAuth.ts",
+    "apps/server/src/warroom/band-bridge.ts",
+    "apps/server/src/warroom/cases.ts",
+    "apps/server/src/warroom/routes.ts",
+    "apps/server/src/warroom/stripe.ts",
+    "apps/server/src/warroom/tools.ts",
+    "apps/server/src/zoowork.ts",
+    "packages/seed/src/generate.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4250,
+    "cache_creation_tokens": 675881,
+    "cache_read_tokens": 55060800,
+    "output_tokens": 349014,
+    "api_call_count": 177,
+    "subagent_tokens": {
+      "input_tokens": 652,
+      "cache_creation_tokens": 208195,
+      "cache_read_tokens": 4151538,
+      "output_tokens": 18783,
+      "api_call_count": 25
+    }
+  }
+}

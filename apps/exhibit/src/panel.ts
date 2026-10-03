@@ -61,7 +61,7 @@ function words(s: string): string {
 }
 
 export function formatCountdown(ms: number): string {
-  if (!Number.isFinite(ms)) return '—'
+  if (!Number.isFinite(ms)) return ''
   if (ms <= 0) return 'overdue'
   const s = Math.floor(ms / 1000)
   const d = Math.floor(s / 86400)
@@ -95,43 +95,43 @@ function toolName(detail: string | null): string {
 export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   root.innerHTML = `
     <header id="topbar">
-      <div class="wordmark"><i></i>Receipts</div>
-      <div class="sep"></div>
-      <div class="merchant" id="t-merchant">—</div>
+      <h1 class="wordmark"><i aria-hidden="true"></i>Receipts</h1>
+      <div class="sep" aria-hidden="true"></div>
+      <div class="merchant" id="t-merchant"></div>
       <div class="chips" id="t-chips"></div>
       <div class="spacer"></div>
       <div class="actions">
-        <button class="ghost" id="b-replay">Replay<kbd>R</kbd></button>
-        <button class="ghost" id="b-live">Run live<kbd>L</kbd></button>
-        <button class="ghost" id="b-reset">Reset<kbd>Esc</kbd></button>
-        <div class="status" id="t-status"><i></i><span>connecting</span></div>
+        <button class="ghost" id="b-replay" aria-keyshortcuts="R">Replay<kbd aria-hidden="true">R</kbd></button>
+        <button class="ghost" id="b-live" aria-keyshortcuts="L">Run live<kbd aria-hidden="true">L</kbd></button>
+        <button class="ghost" id="b-reset" aria-keyshortcuts="Escape">Reset<kbd aria-hidden="true">Esc</kbd></button>
+        <div class="status" id="t-status" role="status" aria-live="polite"><i aria-hidden="true"></i><span>connecting</span></div>
       </div>
     </header>
-    <div id="main">
-      <div class="col" id="left">
+    <main id="main">
+      <div class="col" id="left" aria-label="Case">
         <section class="card case" id="p-case"></section>
         <div id="p-verdict"></div>
         <div id="p-routing"></div>
         <div id="p-stripe"></div>
       </div>
-      <div id="stage-card">
+      <section id="stage-card" aria-label="Evidence graph">
         <div id="stage"></div>
-        <div class="overlay stage-title">Evidence graph<small id="s-sub">Drag to orbit · scroll to zoom · click a node to focus</small></div>
-        <div class="overlay legend" id="s-legend"></div>
-      </div>
-      <div class="col" id="right">
+        <h2 class="overlay stage-title">Evidence graph<small id="s-sub">Drag to orbit, scroll to zoom, click a node to focus</small></h2>
+        <div class="overlay legend" id="s-legend" aria-label="Legend"></div>
+      </section>
+      <aside class="col" id="right" aria-label="Agents and transcript">
         <section class="card">
           <h2>Agents <small id="p-room"></small></h2>
           <div class="agents" id="p-agents"></div>
         </section>
         <section class="card transcript-card">
           <h2>Transcript <small id="p-count"></small></h2>
-          <div class="transcript" id="p-transcript"><div class="empty">Waiting for agents…</div></div>
-          <button class="jump" id="p-jump">Jump to latest ↓</button>
+          <div class="transcript" id="p-transcript" aria-live="polite" aria-relevant="additions"><div class="empty">Waiting for agents</div></div>
+          <button class="jump" id="p-jump">Jump to latest</button>
         </section>
-      </div>
-    </div>
-    <div id="toasts"></div>`
+      </aside>
+    </main>
+    <div id="toasts" role="status" aria-live="polite"></div>`
 
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!
   const el = {
@@ -210,7 +210,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     const headroom = v.headroom_items ?? 0
     const warn = ratio >= threshold * 0.85
     el.chips.innerHTML =
-      `<span class="chip${warn ? ' warn' : ''}" title="(TC40 + TC15) / TC05 for ${esc(v.window ?? 'the window')} · threshold ${pct(threshold, 1)}">VAMP <b>${pct(ratio)}</b></span>` +
+      `<span class="chip${warn ? ' warn' : ''}" title="(TC40 + TC15) / TC05 for ${esc(v.window ?? 'the window')}, threshold ${pct(threshold, 1)}">VAMP <b>${pct(ratio)}</b></span>` +
       `<span class="chip${headroom <= 8 ? ' warn' : ''}" title="Disputes left before the ${pct(threshold, 1)} threshold">Headroom <b>${esc(headroom)} items</b></span>` +
       (stats?.orders ? `<span class="chip">Orders <b>${esc(stats.orders)}</b></span>` : '')
   }
@@ -236,7 +236,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
         `<h2>Case</h2>` +
         `<div class="lead">No open case</div>` +
         `<div class="hint">${s.activeCaseId ? `Live case <b>${esc(s.activeCaseId)}</b> is open on the server; waiting for its events.` : 'Open a hero case to start a live war room, or press <b>R</b> for the offline replay.'}</div>` +
-        `<div class="heroes">${HERO_CASES.map((h) => `<button class="hero-btn" data-case="${esc(h.id)}"><i style="background:${h.color}"></i><div><b>${esc(h.title)}</b><span>${esc(h.brief)}</span></div><code>${esc(h.id)}</code></button>`).join('')}</div>`
+        `<div class="heroes">${HERO_CASES.map((h) => `<button class="hero-btn" data-case="${esc(h.id)}"><div><b>${esc(h.title)}</b><span>${esc(h.brief)}</span></div><code>${esc(h.id)}</code></button>`).join('')}</div>`
       return
     }
     caseEmptyRendered = false
@@ -249,10 +249,10 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       `<h2>${c.kind === 'dispute' ? 'Dispute' : 'Return'} <small>${esc(c.case_id)}</small></h2>` +
       `<div class="title">${esc(c.title)}</div>` +
       `<div class="amount-row"><span class="hero">${money(c.amount)}</span>${populationBadge(c.population)}</div>` +
-      `<div class="sub">${esc(c.customer_name)} · ${esc(c.order_id)}</div>` +
+      `<div class="sub">${esc(c.customer_name)}, order ${esc(c.order_id)}</div>` +
       (c.summary ? `<div class="summary">${esc(c.summary)}</div>` : '') +
       (c.flags.length ? `<div class="flags">${c.flags.map((f) => `<span class="flag">${esc(words(f))}</span>`).join('')}</div>` : '') +
-      (c.due_by ? `<div class="due"><span>Response due</span><b id="p-case-due" class="num">—</b></div>` : '')
+      (c.due_by ? `<div class="due"><span>Response due</span><b id="p-case-due" class="num"></b></div>` : '')
     renderCountdowns()
   }
 
@@ -292,7 +292,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
             cls = 'idle'
         }
       }
-      return `<div class="agent${a.joined ? '' : ' standby'}" title="${esc(meta.brief)}${a.detail ? ` — ${esc(a.detail)}` : ''}"><i style="background:${AGENT_COLOR[name]}"></i><div><b>${esc(meta.title)}</b>${a.evidenceCount ? `<small>${a.evidenceCount} evidence</small>` : ''}</div><span class="pill ${cls}">${esc(pill)}</span></div>`
+      return `<div class="agent${a.joined ? '' : ' standby'}" title="${esc(meta.brief)}${a.detail ? `. ${esc(a.detail)}` : ''}"><i style="background:${AGENT_COLOR[name]}"></i><div><b>${esc(meta.title)}</b>${a.evidenceCount ? `<small>${a.evidenceCount} evidence</small>` : ''}</div><span class="pill ${cls}">${esc(pill)}</span></div>`
     }).join('')
     el.room.textContent = s.case?.room ? s.case.room.title : ''
   }
@@ -313,7 +313,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   function renderTranscript(s: State) {
     const caseId = s.case?.case_id ?? null
     if (caseId !== renderedCaseId || s.transcript.length === 0 || (s.transcript[0] && s.transcript[0].id > renderedTranscriptId + 1 && renderedTranscriptId === 0)) {
-      el.transcript.innerHTML = s.transcript.length ? '' : '<div class="empty">Waiting for agents…</div>'
+      el.transcript.innerHTML = s.transcript.length ? '' : '<div class="empty">Waiting for agents</div>'
       renderedTranscriptId = 0
       renderedCaseId = caseId
       stickToBottom = true
@@ -347,7 +347,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       else el.jump.classList.add('show')
     }
     const msgs = s.transcript.filter((l) => l.kind === 'message').length
-    el.count.textContent = `${msgs} message${msgs === 1 ? '' : 's'} · ${s.evidence.length} evidence`
+    el.count.textContent = `${msgs} message${msgs === 1 ? '' : 's'}, ${s.evidence.length} evidence item${s.evidence.length === 1 ? '' : 's'}`
   }
 
   function renderCards(s: State) {
@@ -357,7 +357,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       verdictKey = vk
       if (v) {
         const tint = TIER_TINT[v.tier] ?? { bg: '#F1F5F9', fg: '#334155', border: '#E2E8F0' }
-        el.verdict.innerHTML = `<section class="card verdict" style="--tint-bg:${tint.bg};--tint-fg:${tint.fg};--tint-border:${tint.border}"><h2>Verdict <small>${v.evidence_ids.length} evidence items</small></h2><div class="hero">${esc(words(v.tier))}</div><div class="conf"><span>Confidence</span><div class="meter"><b style="width:${Math.round(Math.max(0, Math.min(1, v.confidence)) * 100)}%"></b></div><b class="num" style="color:var(--text)">${pct(v.confidence, 0)}</b><span>· abuse score ${v.score.toFixed(2)}</span></div><p>${esc(v.rationale)}</p>${v.policy_citation ? `<div class="cite">${esc(v.policy_citation)}</div>` : ''}</section>`
+        el.verdict.innerHTML = `<section class="card verdict" style="--tint-bg:${tint.bg};--tint-fg:${tint.fg};--tint-border:${tint.border}"><h2>Verdict <small>${v.evidence_ids.length} evidence items</small></h2><div class="hero">${esc(words(v.tier))}</div><div class="conf"><span>Confidence</span><div class="meter"><b style="transform:scaleX(${Math.max(0, Math.min(1, v.confidence)).toFixed(3)})"></b></div><b class="num" style="color:var(--text)">${pct(v.confidence, 0)}</b><span>Abuse score ${v.score.toFixed(2)}</span></div><p>${esc(v.rationale)}</p>${v.policy_citation ? `<div class="cite">${esc(v.policy_citation)}</div>` : ''}</section>`
       } else el.verdict.innerHTML = ''
     }
 
@@ -367,7 +367,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       routingKey = rk
       if (r) {
         const tint = ROUTING_TINT[r.decision] ?? { bg: '#F1F5F9', fg: '#334155' }
-        el.routing.innerHTML = `<section class="card routing"><h2>Routing <small>${esc(r.dispute_id)}</small></h2><div class="hero"><span class="decision" style="background:${tint.bg};color:${tint.fg}">${esc(words(r.decision))}</span></div><div class="kv"><div><b class="num">${pct(r.vamp.ratio_before)}<span class="arrow">→</span>${pct(r.vamp.ratio_after)}</b><span>VAMP before → after</span></div><div><b class="num">${pct(r.vamp.threshold, 1)}</b><span>Threshold</span></div><div><b class="num">${money(r.expected_recovery)}</b><span>Expected recovery</span></div></div><p>${esc(r.rationale)}</p></section>`
+        el.routing.innerHTML = `<section class="card routing"><h2>Routing <small>${esc(r.dispute_id)}</small></h2><div class="hero"><span class="decision" style="background:${tint.bg};color:${tint.fg}">${esc(words(r.decision))}</span></div><div class="kv"><div><b class="num">${pct(r.vamp.ratio_before)}<span class="arrow">to</span>${pct(r.vamp.ratio_after)}</b><span>VAMP before and after</span></div><div><b class="num">${pct(r.vamp.threshold, 1)}</b><span>Threshold</span></div><div><b class="num">${money(r.expected_recovery)}</b><span>Expected recovery</span></div></div><p>${esc(r.rationale)}</p></section>`
       } else el.routing.innerHTML = ''
     }
 
@@ -378,7 +378,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       stripeDueBy = p?.due_by ?? null
       if (p) {
         const fields = Object.entries(p.evidence)
-        el.stripe.innerHTML = `<section class="card stripe"><h2>Stripe representment <small>${esc(p.stripe_dispute_id ?? p.dispute_id)}</small></h2><div class="staged"><i></i>Staged, not submitted</div><div class="countdown"><span>${fields.length} field${fields.length === 1 ? '' : 's'} · due ${esc(new Date(p.due_by).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</span><b id="p-stripe-due">—</b></div><div class="fields">${fields.map(([k, val]) => `<div><span title="${esc(k)}">${esc(k)}</span><em title="${esc(val)}">${esc(val)}</em></div>`).join('')}</div>${p.dashboard_url ? `<div class="link"><a href="${esc(p.dashboard_url)}" target="_blank" rel="noreferrer">Open in Stripe dashboard ↗</a></div>` : ''}</section>`
+        el.stripe.innerHTML = `<section class="card stripe"><h2>Stripe representment <small>${esc(p.stripe_dispute_id ?? p.dispute_id)}</small></h2><div class="staged">Staged, not submitted</div><div class="countdown"><span>${fields.length} field${fields.length === 1 ? '' : 's'}, due ${esc(new Date(p.due_by).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</span><b id="p-stripe-due"></b></div><div class="fields">${fields.map(([k, val]) => `<div><span title="${esc(k)}">${esc(k)}</span><em title="${esc(val)}">${esc(val)}</em></div>`).join('')}</div>${p.dashboard_url ? `<div class="link"><a href="${esc(p.dashboard_url)}" target="_blank" rel="noreferrer">Open in Stripe dashboard</a></div>` : ''}</section>`
       } else el.stripe.innerHTML = ''
     }
     renderCountdowns()
@@ -405,7 +405,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       renderAgents(s)
       renderTranscript(s)
       renderCards(s)
-      el.sub.textContent = s.case ? `${s.case.customer_name} · ${s.case.order_id} · ${s.evidence.length} evidence items` : 'Drag to orbit · scroll to zoom · click a node to focus'
+      el.sub.textContent = s.case ? `${s.case.customer_name}, order ${s.case.order_id}, ${s.evidence.length} evidence item${s.evidence.length === 1 ? '' : 's'}` : 'Drag to orbit, scroll to zoom, click a node to focus'
     } catch (err) {
       console.warn('[panel] render failed', err)
     }

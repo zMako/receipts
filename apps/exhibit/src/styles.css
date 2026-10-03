@@ -4,7 +4,11 @@
   --border: #e6e8ec;
   --text: #0f172a;
   --muted: #64748b;
-  --faint: #94a3b8;
+  --faint: #64748b; /* text use: 4.8:1 on white */
+  --hairline: #94a3b8; /* non-text use only */
+  --font: Geist, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --focus: 0 0 0 2px var(--card), 0 0 0 4px var(--accent);
   --accent: #3b82f6;
   --red: #ef4444;
   --amber: #f59e0b;
@@ -14,7 +18,7 @@
   --right: 380px;
   --gap: 16px;
   --radius: 10px;
-  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.05);
+  --shadow: 0 2px 6px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.08); /* floating elements only */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -28,7 +32,7 @@ body {
   height: 100%;
   background: var(--page);
   color: var(--text);
-  font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 14px/1.45 var(--font);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -46,8 +50,33 @@ button {
 }
 
 a {
-  color: var(--accent);
-  text-decoration: none;
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(29, 78, 216, 0.35);
+}
+
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+::selection {
+  background: #dbeafe;
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .num {
@@ -68,6 +97,7 @@ a {
 }
 
 #topbar .wordmark {
+  margin: 0;
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -148,7 +178,7 @@ a {
 
 .ghost {
   appearance: none;
-  height: 32px;
+  height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -174,8 +204,8 @@ a {
 }
 
 .ghost kbd {
-  font: 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
-  color: var(--faint);
+  font: 12px/1 var(--font);
+  color: var(--muted);
   margin-left: 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -247,7 +277,6 @@ a {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   padding: 16px;
   animation: rise 300ms var(--ease);
 }
@@ -265,21 +294,23 @@ a {
 
 .card h2 {
   margin: 0 0 10px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
+  letter-spacing: -0.005em;
+  color: var(--text);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
 }
 
 .card h2 small {
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--faint);
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card .hero {
@@ -354,7 +385,7 @@ a {
 }
 
 .flag {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   padding: 2px 7px;
   border-radius: 5px;
@@ -387,7 +418,7 @@ a {
 .case.closed .title::after {
   content: 'Closed';
   margin-left: 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
   background: var(--page);
@@ -421,7 +452,7 @@ a {
   appearance: none;
   text-align: left;
   display: grid;
-  grid-template-columns: 10px 1fr auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
@@ -449,13 +480,6 @@ a {
   cursor: default;
 }
 
-.hero-btn i {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
 .hero-btn b {
   display: block;
   font-weight: 600;
@@ -469,8 +493,8 @@ a {
 }
 
 .hero-btn code {
-  font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--faint);
+  font: 12px var(--mono);
+  color: var(--muted);
 }
 
 /* ---------- verdict / routing / stripe ---------- */
@@ -504,10 +528,12 @@ a {
 
 .meter b {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: 3px;
   background: var(--tint-fg, var(--accent));
-  transition: width 400ms var(--ease);
+  transform-origin: left center;
+  transition: transform 400ms var(--ease);
 }
 
 .cite {
@@ -551,12 +577,12 @@ a {
 }
 
 .kv span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .kv .arrow {
-  color: var(--faint);
+  color: var(--muted);
   font-weight: 400;
   margin: 0 4px;
 }
@@ -571,14 +597,7 @@ a {
   background: #fffbeb;
   border: 1px solid #fde68a;
   border-radius: 999px;
-  padding: 3px 10px 3px 8px;
-}
-
-.stripe .staged i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--amber);
+  padding: 3px 10px;
 }
 
 .stripe .countdown {
@@ -612,7 +631,7 @@ a {
   gap: 10px;
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
-  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 12px/1.4 var(--mono);
 }
 
 .fields span {
@@ -644,7 +663,6 @@ a {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   overflow: hidden;
 }
 
@@ -671,19 +689,17 @@ a {
 #stage-card .stage-title {
   left: 16px;
   top: 14px;
-  font-size: 12px;
+  margin: 0;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text);
 }
 
 #stage-card .stage-title small {
   display: block;
   font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--faint);
+  font-size: 12px;
+  color: var(--muted);
   margin-top: 2px;
 }
 
@@ -716,7 +732,7 @@ a {
 }
 
 .gl-tip {
-  font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  font: 12px/1.4 var(--font);
   color: var(--text);
   background: var(--card);
   border: 1px solid var(--border);
@@ -734,7 +750,7 @@ a {
 }
 
 .gl-label {
-  font: 500 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  font: 500 12px/1 var(--font);
   color: var(--text);
   background: var(--card);
   border: 1px solid var(--border);
@@ -802,7 +818,7 @@ a {
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   background: var(--page);
   border: 1px solid var(--border);
@@ -820,7 +836,7 @@ a {
   background: #eff6ff;
   border-color: #bfdbfe;
   color: #1d4ed8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--mono);
 }
 
 .pill.thinking {
@@ -932,7 +948,7 @@ a {
 }
 
 .transcript .empty {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 13px;
   padding: 8px 0;
 }
@@ -963,7 +979,7 @@ a {
   height: 20px;
   padding: 0 7px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -976,7 +992,7 @@ a {
 }
 
 .ev .by {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -992,7 +1008,7 @@ a {
   align-items: center;
   gap: 8px;
   margin-top: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -1033,7 +1049,7 @@ a {
   border: 1px solid var(--border);
   background: var(--card);
   border-radius: 999px;
-  height: 28px;
+  height: 32px;
   padding: 0 12px;
   font-size: 12px;
   font-weight: 500;
@@ -1101,5 +1117,31 @@ a {
 
   #stage-card {
     min-height: 420px;
+  }
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .line,
+  .ev,
+  .gl-label,
+  .toast {
+    animation: none;
+  }
+
+  .transcript {
+    scroll-behavior: auto;
+  }
+
+  .meter b,
+  .ghost,
+  .hero-btn,
+  .pill,
+  .agent,
+  .status i,
+  .jump {
+    transition-duration: 1ms;
   }
 }

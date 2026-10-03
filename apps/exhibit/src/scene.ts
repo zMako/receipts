@@ -66,6 +66,7 @@ const EDGE_REST = 0.5
 const MAX_LABELS = 28
 /** OrbitControls: 2.0 is one revolution per 30s at 60fps; we want one per three minutes. */
 const ORBIT_SPEED = 2.0 * (30 / 180)
+const REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 const NEUTRAL: Record<NodeType, string> = {
   customer: UI.neutralNode,
@@ -221,7 +222,7 @@ export class ExhibitScene {
     if (controls) {
       controls.enableDamping = true
       controls.dampingFactor = 0.08
-      controls.autoRotate = true
+      controls.autoRotate = !REDUCED_MOTION
       controls.autoRotateSpeed = ORBIT_SPEED
       controls.maxDistance = 1400
       controls.minDistance = 30
@@ -654,7 +655,7 @@ export class ExhibitScene {
     const pos = centroid.clone().add(dir.multiplyScalar(distance))
     this.pauseOrbit(ms / 1000 + 1.5)
     try {
-      this.graph.cameraPosition({ x: pos.x, y: pos.y, z: pos.z }, { x: centroid.x, y: centroid.y, z: centroid.z }, ms)
+      this.graph.cameraPosition({ x: pos.x, y: pos.y, z: pos.z }, { x: centroid.x, y: centroid.y, z: centroid.z }, REDUCED_MOTION ? 0 : ms)
     } catch (err) {
       console.warn('[scene] camera move failed', err)
     }
@@ -663,9 +664,9 @@ export class ExhibitScene {
   focusOverview(): void {
     this.pauseOrbit(2.4)
     try {
-      this.graph.zoomToFit(1600, 60)
+      this.graph.zoomToFit(REDUCED_MOTION ? 0 : 1600, 60)
     } catch {
-      this.graph.cameraPosition({ x: 0, y: 70, z: 440 }, { x: 0, y: 0, z: 0 }, 1600)
+      this.graph.cameraPosition({ x: 0, y: 70, z: 440 }, { x: 0, y: 0, z: 0 }, REDUCED_MOTION ? 0 : 1600)
     }
   }
 
@@ -695,7 +696,7 @@ export class ExhibitScene {
     const t = this.t
 
     if (this.controls) {
-      if (this.resumeOrbitAt !== null && t >= this.resumeOrbitAt && !this.dragging) {
+      if (this.resumeOrbitAt !== null && t >= this.resumeOrbitAt && !this.dragging && !REDUCED_MOTION) {
         this.resumeOrbitAt = null
         this.controls.autoRotate = true
       }

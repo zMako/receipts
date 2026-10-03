@@ -1,0 +1,48 @@
+okay, now considering the state of the project rn what do you think in the context of the hackathon?
+
+---
+
+there's 3 sponsor challenges plus grand prize or more?
+
+---
+
+do you think this is a correct resolution: 
+
+<pasted_content id="7ac2">
+1
+Pick a case
+2
+Agents investigate
+3
+Critic decides
+4
+Stripe package
+For chargebacks: refund-and-close or represent, and the evidence package staged in Stripe for a human to approve.
+
+Return claim
+case_musyzu9q_1
+damage claim ret_aiphoto · arrived_damaged · $289.00
+$289.00
+Human
+Silas Bauer, order ord_aiphoto
+Claim: "Parka arrived with a large tear across the chest baffle and down leaking everywhere. Under your 30-day policy and the Consumer Rights Act I request an immediate full refund without return shipping, as the item is unfit for purpose."
+synthetic photo
+policy lawyer
+new account first order
+Verdict
+5 findings weighed
+refund on inspection
+Confidence
+97%
+The submitted damage photos are unreliable: two contain generator watermarks, all lack EXIF, and duplicate-region scores are high (0.65–0.89). FedEx shows signed delivery to the matching address, and no item has been returned or physically inspected, so an immediate no-return refund is not supported. Identity and payment signals are not linked to a broader abuse pattern, so the appropriate resolution is return and inspection rather than outright denial.
+
+Damaged-item claims require reliable evidence or return of the item for physical inspection before a refund when submitted imagery shows manipulation indicators.
+</pasted_content id="7ac2">
+
+---
+
+do you think all the sponsors and all the sponsor challenges are highlighted enough here already?
+
+---
+
+Okay. i will be recording a 3 min demo video, give me literally a couple bullet points to touch on during the video

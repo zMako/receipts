@@ -60,9 +60,9 @@ export interface Panel {
 
 const STEPS = [
   { title: 'Pick a case', hint: 'Open chargebacks and return claims wait in the queue. Choose one to put the agents on it.' },
-  { title: 'Agents investigate', hint: 'Four specialists pull evidence from the order vault and attach findings. The critic coordinates them in the Band room.' },
+  { title: 'Agents investigate', hint: 'Four ZooWork agents pull evidence from the order vault and attach findings. The critic coordinates them through the Band room.' },
   { title: 'Critic decides', hint: 'A tiered verdict: instant refund, exchange first, refund on inspection, require verification, or decline.' },
-  { title: 'Stripe package', hint: 'For chargebacks: refund-and-close or represent, and the evidence package staged in Stripe for a human to approve.' },
+  { title: 'Evidence package', hint: 'For chargebacks: refund-and-close or represent, and the evidence package staged on the payments rail for a human to approve.' },
 ]
 
 function esc(s: unknown): string {
@@ -148,6 +148,13 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       <div class="col" id="left" aria-label="Case">
         <section class="card steps" id="p-steps"></section>
         <section class="card queue" id="p-queue"></section>
+        <section class="card builton" id="p-builton">
+          <h2>Built on</h2>
+          <div class="sponsor"><b>ZooWork</b><span>Five managed agents (history, logistics, identity, forensics, critic), each with custom tools over the evidence vault.</span></div>
+          <div class="sponsor"><b>Band</b><span>The critic opens a room and @mentions the specialists; their replies route back through the room. Remove Band and the coordination breaks.</span></div>
+          <div class="sponsor"><b>Entire</b><span>Every commit of this build carries its Claude Code session, so the work itself is auditable.</span></div>
+          <div class="sponsor rail"><b>Stripe</b><span>Payments rail, test mode: disputes are created, evidence staged and submitted for real.</span></div>
+        </section>
         <section class="card case" id="p-case" hidden></section>
         <div id="p-verdict"></div>
         <div id="p-routing"></div>
@@ -160,7 +167,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       </section>
       <aside class="col" id="right" aria-label="Agents and transcript">
         <section class="card outline">
-          <h2>Investigation <small id="p-room"></small></h2>
+          <h2>Investigation <small id="p-room">ZooWork agents, coordinated in Band</small></h2>
           <div class="agents" id="p-agents"></div>
         </section>
         <section class="card transcript-card collapsed" id="p-transcript-card">
@@ -182,6 +189,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     reset: $<HTMLButtonElement>('b-reset'),
     steps: $('p-steps'),
     queue: $('p-queue'),
+    builton: $('p-builton'),
     case: $('p-case'),
     verdict: $('p-verdict'),
     routing: $('p-routing'),
@@ -326,6 +334,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   function renderQueue(s: State) {
     const show = !s.case
     el.queue.hidden = !show
+    el.builton.hidden = !show
     if (!show) return
     const key = queue.map((q) => `${q.id}:${q.case?.status ?? ''}:${q.case?.tier ?? ''}`).join('|') + `:${s.activeCaseId ?? ''}`
     if (key === lastQueueKey) return
@@ -434,7 +443,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
         ${body ? `<div class="findings">${body}</div>` : ''}
       </div>`
     }).join('')
-    el.room.textContent = s.case?.room ? `Band room: ${s.case.room.title}` : ''
+    el.room.textContent = s.case?.room ? `ZooWork agents in Band room "${s.case.room.title}"` : 'ZooWork agents, coordinated in Band'
   }
 
   function renderTranscript(s: State) {
@@ -506,7 +515,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
           : !p.submitted && !p.stripe_dispute_id
             ? `<div class="hint">Staged locally; Stripe test mode was unavailable for this case.</div>`
             : ''
-        el.stripe.innerHTML = `<section class="card stripe"><h2>Stripe evidence package <small>${esc(p.stripe_dispute_id ?? p.dispute_id)}</small></h2>${status}<div class="countdown"><span>${fields.length} field${fields.length === 1 ? '' : 's'}, due ${esc(new Date(p.due_by).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</span><b id="p-stripe-due"></b></div>${action ? `<div class="approve">${action}</div>` : ''}<div class="fields">${fields.map(([k, val]) => `<div><span title="${esc(k)}">${esc(words(k))}</span><em title="${esc(val)}">${esc(val)}</em></div>`).join('')}</div>${p.dashboard_url ? `<div class="link"><a href="${esc(p.dashboard_url)}" target="_blank" rel="noreferrer">Open in the Stripe dashboard</a></div>` : ''}</section>`
+        el.stripe.innerHTML = `<section class="card stripe"><h2>Evidence package <small>staged in Stripe test mode, ${esc(p.stripe_dispute_id ?? p.dispute_id)}</small></h2>${status}<div class="countdown"><span>${fields.length} field${fields.length === 1 ? '' : 's'}, due ${esc(new Date(p.due_by).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</span><b id="p-stripe-due"></b></div>${action ? `<div class="approve">${action}</div>` : ''}<div class="fields">${fields.map(([k, val]) => `<div><span title="${esc(k)}">${esc(words(k))}</span><em title="${esc(val)}">${esc(val)}</em></div>`).join('')}</div>${p.dashboard_url ? `<div class="link"><a href="${esc(p.dashboard_url)}" target="_blank" rel="noreferrer">Open in the Stripe dashboard</a></div>` : ''}</section>`
       } else el.stripe.innerHTML = ''
     }
     renderCountdowns()

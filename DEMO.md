@@ -36,8 +36,10 @@ Evidence 3.0 fields expect."
 Click the first queue row, "Double dip chargeback". Point at the Band room tab briefly.
 
 "A chargeback just came in on a Muse order: 'I did not make this purchase, an AI assistant placed
-it.' The Critic opens a room on Band and mentions four specialists. Each is a ZooWork managed
-agent with its own tools over the vault. Watch them fly to the case."
+it.' Five agents run on ZooWork Managed Agents, each with its own tools over the vault. The Critic
+opens a room on Band and @mentions the four specialists; their replies route back through the room,
+and you can see 'via Band' on each row as they wake. Remove Band and the coordination breaks. Watch
+the evidence land on the map."
 
 As evidence streaks in, narrate the ones that appear:
 - Identity: "shared sandbox fingerprint, cloud egress, single-use card. Undeclared agent. No
@@ -65,9 +67,10 @@ blocker. It is a scored decision on every claim, with the receipts attached."
 
 ## 2:50 Close (10 s)
 
-"Built today on ZooWork managed agents, coordinated through Band, tracked by Entire, with real
-Stripe test disputes. The evidence rules are already broken. This is what a merchant stores
-starting Monday."
+"Built today. The agents run on ZooWork. Band is the room they coordinate in. Entire captured every
+Claude Code session into the commits, so the build itself is auditable, twenty-plus checkpoints. The
+payments rail is Stripe in test mode, and the disputes you saw are real. The evidence rules are
+already broken. This is what a merchant stores starting Monday."
 
 ## If something stalls
 

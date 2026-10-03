@@ -33,8 +33,19 @@ filed, and today that is a guess.
 
 **Track / P&L line:** Risk, lose less. Returns abuse, refund fraud and chargebacks.
 
-**Sponsor tools:** ZooWork (agents and tools), Band (room coordination between five registered
-agents), Entire (every Claude Code session attached to the commits, 8 checkpoints), Stripe test mode.
+**How the sponsors are used (where, not just that):**
+- **ZooWork Managed Agents** run the whole investigation: five agents (history, logistics, identity,
+  forensics, critic), each created through the SDK with application-executed custom tools over the
+  evidence vault (customer history, return tracing, session classification, linked accounts, claim
+  forensics, verdict, routing). Deterministic fallbacks keep a live demo moving if a turn stalls.
+- **Band** is the coordination layer, not a log: the critic posts the case brief into the "Dispute War
+  Room" and @mentions the four specialists; each specialist is a registered Band agent that wakes on
+  its mention, investigates, and replies to the critic through the room. The exhibit shows "via Band"
+  on each agent as it wakes. Remove Band and the coordination breaks.
+- **Entire** mirrors the repo and attached every Claude Code session of this build to its commits
+  (twenty-plus checkpoints), so a judge can audit how the code was made, not just read it.
+- Stripe (not a sponsor) is the payments rail, in test mode: disputes are created, evidence staged
+  with `submit=false`, and submitted on the merchant's approval click.
 
 **Links:**
 - Repo: https://github.com/zMako/receipts

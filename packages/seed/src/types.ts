@@ -30,7 +30,7 @@ export interface Device {
   browser: string
   hardware: string
   /** Identical across every Muse session: one sandbox image. */
-  cluster?: 'muse-sandbox' | 'agent-runtime'
+  cluster?: 'muse-sandbox' | 'dots-sandbox' | 'agent-runtime'
 }
 
 export interface PaymentInstrument {

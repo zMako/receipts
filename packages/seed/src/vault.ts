@@ -180,7 +180,7 @@ export class VaultBuilder {
       signals.push({ signal, detail, weight })
       score += weight
     }
-    if (device?.cluster === 'muse-sandbox') hit('sandbox_fingerprint_cluster', `Fingerprint ${device.fingerprint} is shared by ${this.fingerprintCount.get(device.fingerprint) ?? 1} sessions across different customers (${device.hardware})`, 0.45)
+    if (device?.cluster?.endsWith('-sandbox')) hit('sandbox_fingerprint_cluster', `Fingerprint ${device.fingerprint} is shared by ${this.fingerprintCount.get(device.fingerprint) ?? 1} sessions across different customers (${device.cluster.replace('-sandbox', '')} agent sandbox: ${device.hardware})`, 0.45)
     if (CLOUD_ASNS.has(s.asn)) hit('cloud_egress', `Purchase IP ${s.ip} egresses from ${s.asn_org} (AS${s.asn}), not a residential network`, 0.2)
     if (s.hover_events === 0 && s.scroll_events === 0) hit('no_pointer_telemetry', 'Zero hover and zero scroll events for the whole session', 0.15)
     if (s.path === 'straight') hit('straight_line_navigation', `${s.pages} pages, landed directly on product then checkout`, 0.05)

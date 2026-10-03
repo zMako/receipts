@@ -42,6 +42,8 @@ export interface PanelHandlers {
   /** Open a queue item live. `id` is a dispute (dp_*) or return (ret_*) id. */
   onOpenCase(id: string): void
   onAutoRun(enabled: boolean): void
+  /** Merchant approval: submit the staged Stripe package for the active case. */
+  onSubmit(caseId: string): void
 }
 
 export interface Panel {
@@ -199,7 +201,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   el.legend.innerHTML =
     `<div><i style="background:#CBD5E1"></i>Customer</div>` +
     (['human', 'signed', 'declared', 'undeclared-suspected'] as const).map((k) => `<div><i style="background:${POPULATION[k].color}"></i>Order, ${POPULATION[k].label.toLowerCase()}</div>`).join('') +
-    `<div><i class="ring" style="--pink:${POPULATION.cluster.color}"></i>Muse sandbox device</div>` +
+    `<div><i class="ring" style="--pink:${POPULATION.cluster.color}"></i>Agent sandbox (Muse, Dots)</div>` +
     `<div><i class="ring" style="--pink:#EF4444"></i>Flagged order</div>` +
     `<div><i class="leaf"></i>Shared device, address or card</div>`
 
@@ -212,6 +214,28 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     btn.disabled = true
     window.setTimeout(() => (btn.disabled = false), 4000)
     handlers.onOpenCase(btn.dataset.case ?? '')
+  })
+  // Approve and submit: a two-click confirm instead of a modal.
+  let confirmTimer = 0
+  el.stripe.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-submit]')
+    if (!btn || btn.disabled) return
+    if (btn.dataset.armed !== '1') {
+      btn.dataset.armed = '1'
+      btn.textContent = 'Confirm: submit to Stripe'
+      btn.classList.add('armed')
+      window.clearTimeout(confirmTimer)
+      confirmTimer = window.setTimeout(() => {
+        btn.dataset.armed = '0'
+        btn.textContent = 'Approve and submit to Stripe'
+        btn.classList.remove('armed')
+      }, 6000)
+      return
+    }
+    window.clearTimeout(confirmTimer)
+    btn.disabled = true
+    btn.textContent = 'Submitting'
+    handlers.onSubmit(btn.dataset.submit ?? '')
   })
   el.transcriptToggle.addEventListener('click', () => {
     const collapsed = el.transcriptCard.classList.toggle('collapsed')
@@ -441,13 +465,21 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     }
 
     const p = s.stripe
-    const pk = p ? `${s.case?.case_id}:${p.dispute_id}:${Object.keys(p.evidence).length}` : ''
+    const pk = p ? `${s.case?.case_id}:${p.dispute_id}:${Object.keys(p.evidence).length}:${p.submitted}:${p.submitted_status ?? ''}` : ''
     if (pk !== stripeKey) {
       stripeKey = pk
       stripeDueBy = p?.due_by ?? null
       if (p) {
         const fields = Object.entries(p.evidence)
-        el.stripe.innerHTML = `<section class="card stripe"><h2>Stripe evidence package <small>${esc(p.stripe_dispute_id ?? p.dispute_id)}</small></h2><div class="staged">Staged, not submitted</div><div class="countdown"><span>${fields.length} field${fields.length === 1 ? '' : 's'}, due ${esc(new Date(p.due_by).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</span><b id="p-stripe-due"></b></div><div class="fields">${fields.map(([k, val]) => `<div><span title="${esc(k)}">${esc(words(k))}</span><em title="${esc(val)}">${esc(val)}</em></div>`).join('')}</div>${p.dashboard_url ? `<div class="link"><a href="${esc(p.dashboard_url)}" target="_blank" rel="noreferrer">Review and submit in Stripe</a></div>` : ''}</section>`
+        const status = p.submitted
+          ? `<div class="staged submitted">Submitted to Stripe${p.submitted_status ? `, ${esc(words(p.submitted_status))}` : ''}</div>`
+          : `<div class="staged">Staged, not submitted</div>`
+        const action = !p.submitted && p.stripe_dispute_id && s.case
+          ? `<button class="primary" data-submit="${esc(s.case.case_id)}">Approve and submit to Stripe</button>`
+          : !p.submitted && !p.stripe_dispute_id
+            ? `<div class="hint">Staged locally; Stripe test mode was unavailable for this case.</div>`
+            : ''
+        el.stripe.innerHTML = `<section class="card stripe"><h2>Stripe evidence package <small>${esc(p.stripe_dispute_id ?? p.dispute_id)}</small></h2>${status}<div class="countdown"><span>${fields.length} field${fields.length === 1 ? '' : 's'}, due ${esc(new Date(p.due_by).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</span><b id="p-stripe-due"></b></div>${action ? `<div class="approve">${action}</div>` : ''}<div class="fields">${fields.map(([k, val]) => `<div><span title="${esc(k)}">${esc(words(k))}</span><em title="${esc(val)}">${esc(val)}</em></div>`).join('')}</div>${p.dashboard_url ? `<div class="link"><a href="${esc(p.dashboard_url)}" target="_blank" rel="noreferrer">Open in the Stripe dashboard</a></div>` : ''}</section>`
       } else el.stripe.innerHTML = ''
     }
     renderCountdowns()

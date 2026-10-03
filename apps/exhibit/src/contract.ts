@@ -38,6 +38,7 @@ export const API = {
   evidence: (orderId: string) => `/api/orders/${orderId}/evidence`,
   replay: (name: string) => `/api/replay/${name}`,
   openCase: '/api/cases/open',
+  submitCase: (caseId: string) => `/api/cases/${caseId}/submit`,
   reset: '/api/reset',
   checkout: '/api/checkout',
   live: '/live',

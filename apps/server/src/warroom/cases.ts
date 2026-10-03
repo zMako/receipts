@@ -2,7 +2,7 @@ import { AGENT_NAMES, type AgentName, type EvidenceItem, type EvidenceVault, typ
 import { data, vaultFor, vaults } from '../store.js'
 import { runTurn } from '../zoowork.js'
 import { AGENT_IDS } from './agents.js'
-import { buildEvidencePackage, stageOnStripe } from './stripe.js'
+import { buildEvidencePackage, stageOnStripe, submitOnStripe } from './stripe.js'
 import { executeTool, type ToolContext } from './tools.js'
 
 export type Broadcast = (ev: LiveEvent) => void
@@ -42,7 +42,7 @@ export interface CaseRecord {
   evidence: EvidenceItem[]
   verdict?: { tier: VerdictTier; confidence: number; score: number; rationale: string; policy_citation?: string }
   routing?: { decision: RoutingDecision; rationale: string; vamp: { ratio_before: number; ratio_after: number; threshold: number; headroom_items: number }; expected_recovery: number }
-  stripe?: { stripe_dispute_id?: string; dashboard_url?: string; due_by: string; evidence: Record<string, string> }
+  stripe?: { stripe_dispute_id?: string; dashboard_url?: string; due_by: string; evidence: Record<string, string>; submitted?: { at: string; status: string } }
   closed_at?: string
   outcome?: string
   events: LiveEvent[]
@@ -406,4 +406,18 @@ async function stageEvidence(c: CaseRecord): Promise<void> {
   }
   c.stripe = { ...staged, evidence }
   emit(c, { type: 'stripe.evidence_staged', case_id: c.id, dispute_id: c.dispute_id!, stripe_dispute_id: staged.stripe_dispute_id, due_by: staged.due_by, submitted: false, evidence, dashboard_url: staged.dashboard_url })
+}
+
+/** The merchant approves the staged package: submit it to Stripe and tell the exhibit. */
+export async function submitCase(caseId: string): Promise<{ status: string }> {
+  const c = cases.get(caseId)
+  if (!c) throw new Error('case_not_found')
+  if (!c.stripe?.stripe_dispute_id) throw new Error('nothing_staged_on_stripe')
+  if (c.stripe.submitted) return { status: c.stripe.submitted.status }
+  const strong = (c.verdict?.confidence ?? 0) >= 0.8 && c.routing?.decision === 'representment'
+  const result = await submitOnStripe(c.stripe.stripe_dispute_id, { testOutcome: strong ? 'win' : undefined })
+  c.stripe.submitted = { at: new Date().toISOString(), status: result.status }
+  c.outcome = `submitted to Stripe (${result.status})`
+  emit(c, { type: 'stripe.submitted', case_id: c.id, dispute_id: c.dispute_id!, stripe_dispute_id: result.id, status: result.status, submitted_at: c.stripe.submitted.at, dashboard_url: c.stripe.dashboard_url })
+  return { status: result.status }
 }

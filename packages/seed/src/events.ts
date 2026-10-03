@@ -50,6 +50,7 @@ export type LiveEvent =
   | { type: 'verdict'; case_id: string; tier: VerdictTier; confidence: number; score: number; rationale: string; policy_citation?: string; evidence_ids: string[] }
   | { type: 'dispute.routing'; case_id: string; dispute_id: string; decision: RoutingDecision; rationale: string; vamp: { ratio_before: number; ratio_after: number; threshold: number; headroom_items: number }; expected_recovery: number }
   | { type: 'stripe.evidence_staged'; case_id: string; dispute_id: string; stripe_dispute_id?: string; due_by: string; submitted: false; evidence: Record<string, string>; dashboard_url?: string }
+  | { type: 'stripe.submitted'; case_id: string; dispute_id: string; stripe_dispute_id: string; status: string; submitted_at: string; dashboard_url?: string }
   | { type: 'case.closed'; case_id: string; outcome: string }
   | { type: 'reset' }
 
@@ -68,6 +69,8 @@ export const API = {
   replay: (name: string) => `/api/replay/${name}`,
   /** POST { dispute_id } or { return_id }; returns { case_id }. Starts a live war room. */
   openCase: '/api/cases/open',
+  /** POST; submits the staged Stripe evidence for the case (merchant approval). Returns { status }. */
+  submitCase: (caseId: string) => `/api/cases/${caseId}/submit`,
   /** POST; clears live state and broadcasts { type: 'reset' }. */
   reset: '/api/reset',
   /** POST a cart with optional signature headers; returns checkout.observed payload. */

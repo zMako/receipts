@@ -1463,3 +1463,56 @@ a:hover {
     transition: none;
   }
 }
+
+/* ---------- approve ---------- */
+
+.approve {
+  margin-top: 12px;
+}
+
+.primary {
+  appearance: none;
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid #1d4ed8;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 200ms var(--ease),
+    transform 200ms var(--ease);
+}
+
+.primary:hover {
+  background: #1d4ed8;
+}
+
+.primary:active {
+  transform: translateY(1px);
+}
+
+.primary.armed {
+  background: #b45309;
+  border-color: #92400e;
+}
+
+.primary[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.stripe .staged.submitted {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.stripe .hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}

@@ -166,10 +166,11 @@ check('every event type in the contract is handled', () => {
     { type: 'dispute.routing', case_id: 'case_x', dispute_id: 'dp_x', decision: 'refund_and_close', rationale: 'r', vamp: { ratio_before: 0.01, ratio_after: 0.01, threshold: 0.015, headroom_items: 3 }, expected_recovery: 0 },
     { type: 'stripe.evidence_staged', case_id: 'case_x', dispute_id: 'dp_x', stripe_dispute_id: 'dp_1', due_by: '2026-10-09T00:00:00.000Z', submitted: false, evidence: { a: 'b' }, dashboard_url: 'https://dashboard.stripe.com/test' },
     { type: 'case.closed', case_id: 'case_x', outcome: 'closed' },
+    { type: 'stripe.submitted', case_id: 'case_x', dispute_id: 'dp_x', stripe_dispute_id: 'dp_1', status: 'under_review', submitted_at: '2026-10-03T22:00:00.000Z' },
     { type: 'reset' },
   ]
   const types = new Set(samples.map((e) => e.type))
-  const contractTypes = ['hello', 'checkout.observed', 'case.opened', 'agent.joined', 'agent.status', 'agent.message', 'evidence.attached', 'verdict', 'dispute.routing', 'stripe.evidence_staged', 'case.closed', 'reset']
+  const contractTypes = ['hello', 'checkout.observed', 'case.opened', 'agent.joined', 'agent.status', 'agent.message', 'evidence.attached', 'verdict', 'dispute.routing', 'stripe.evidence_staged', 'stripe.submitted', 'case.closed', 'reset']
   for (const t of contractTypes) assert.ok(types.has(t as LiveEvent['type']), `sample for ${t}`)
 
   let s = seedGraph(initialState(), seed)

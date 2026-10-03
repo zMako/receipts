@@ -93,7 +93,9 @@ export interface StripePackage {
   dispute_id: string
   stripe_dispute_id: string | null
   due_by: string
-  submitted: false
+  submitted: boolean
+  submitted_status?: string
+  submitted_at?: string
   evidence: Record<string, string>
   dashboard_url: string | null
 }
@@ -444,6 +446,13 @@ function reduce(state: State, event: LiveEvent): State {
         dashboard_url: event.dashboard_url ?? null,
       }
       return { ...state, stripe, transcript: line(state, { kind: 'system', text: `Stripe evidence staged for ${event.dispute_id}, not submitted. Due ${event.due_by}` }) }
+    }
+
+    case 'stripe.submitted': {
+      if (!state.stripe) return state
+      const stripe: StripePackage = { ...state.stripe, submitted: true, submitted_status: event.status, submitted_at: event.submitted_at, stripe_dispute_id: event.stripe_dispute_id ?? state.stripe.stripe_dispute_id, dashboard_url: event.dashboard_url ?? state.stripe.dashboard_url }
+      const c = state.case && state.case.case_id === event.case_id ? { ...state.case, outcome: `submitted to Stripe (${event.status})` } : state.case
+      return { ...state, stripe, case: c, transcript: line(state, { kind: 'system', text: `Evidence submitted to Stripe. Dispute status: ${event.status.replace(/_/g, ' ')}` }) }
     }
 
     case 'case.closed': {

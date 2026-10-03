@@ -70,6 +70,20 @@ export interface StagedDispute {
 /** Stripe dispute evidence fields that accept text. The others (shipping_documentation, receipt, ...) expect uploaded File ids. */
 const TEXT_FIELDS = new Set(['product_description', 'customer_name', 'customer_email_address', 'customer_purchase_ip', 'billing_address', 'shipping_address', 'shipping_carrier', 'shipping_tracking_number', 'shipping_date', 'refund_policy_disclosure', 'refund_refusal_explanation', 'access_activity_log', 'uncategorized_text', 'cancellation_policy_disclosure', 'duplicate_charge_explanation', 'service_date', 'cancellation_rebuttal'])
 
+/**
+ * Submit staged evidence (the merchant's approval click). Stripe test mode resolves a dispute as
+ * won when the evidence text contains "winning_evidence", so strong representments demo end to end.
+ */
+export async function submitOnStripe(stripeDisputeId: string, opts: { testOutcome?: 'win' | 'lose' } = {}): Promise<{ id: string; status: string }> {
+  const body: Record<string, string> = { submit: 'true' }
+  if (opts.testOutcome) {
+    const current = await stripe<{ evidence?: { uncategorized_text?: string } }>(`/disputes/${stripeDisputeId}`)
+    body['evidence[uncategorized_text]'] = `${current.evidence?.uncategorized_text ?? ''} ${opts.testOutcome === 'win' ? 'winning_evidence' : 'losing_evidence'}`.trim().slice(0, 20_000)
+  }
+  const updated = await stripe<{ id: string; status: string }>(`/disputes/${stripeDisputeId}`, body)
+  return { id: updated.id, status: updated.status }
+}
+
 export async function stageOnStripe(amountUsd: number, orderId: string, evidence: Record<string, string>): Promise<StagedDispute> {
   const pi = await stripe<{ id: string; latest_charge: string }>('/payment_intents', {
     amount: Math.round(amountUsd * 100),

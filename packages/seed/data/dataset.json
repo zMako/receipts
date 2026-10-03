@@ -1510,43 +1510,43 @@
   },
   {
    "id": "dev_0616df19",
-   "fingerprint": "fp_7c1e9a_linux-chrome131-swiftshader-2vcpu",
-   "platform": "Linux x86_64 (Ubuntu 24.04)",
+   "fingerprint": "fp_b04d22_linux-chrome131-swiftshader-4vcpu",
+   "platform": "Linux x86_64 (cloud computer)",
    "browser": "Chrome 131 (headful, virtualized)",
-   "hardware": "2 vCPU, 7.7 GiB, SwiftShader, 1280x720",
-   "cluster": "muse-sandbox"
+   "hardware": "4 vCPU, 16 GiB, SwiftShader, 1440x900",
+   "cluster": "dots-sandbox"
   },
   {
    "id": "dev_04a42f1d",
-   "fingerprint": "fp_7c1e9a_linux-chrome131-swiftshader-2vcpu",
-   "platform": "Linux x86_64 (Ubuntu 24.04)",
+   "fingerprint": "fp_b04d22_linux-chrome131-swiftshader-4vcpu",
+   "platform": "Linux x86_64 (cloud computer)",
    "browser": "Chrome 131 (headful, virtualized)",
-   "hardware": "2 vCPU, 7.7 GiB, SwiftShader, 1280x720",
-   "cluster": "muse-sandbox"
+   "hardware": "4 vCPU, 16 GiB, SwiftShader, 1440x900",
+   "cluster": "dots-sandbox"
   },
   {
    "id": "dev_c86e835c",
-   "fingerprint": "fp_7c1e9a_linux-chrome131-swiftshader-2vcpu",
-   "platform": "Linux x86_64 (Ubuntu 24.04)",
+   "fingerprint": "fp_b04d22_linux-chrome131-swiftshader-4vcpu",
+   "platform": "Linux x86_64 (cloud computer)",
    "browser": "Chrome 131 (headful, virtualized)",
-   "hardware": "2 vCPU, 7.7 GiB, SwiftShader, 1280x720",
-   "cluster": "muse-sandbox"
+   "hardware": "4 vCPU, 16 GiB, SwiftShader, 1440x900",
+   "cluster": "dots-sandbox"
   },
   {
    "id": "dev_4c2e9d2e",
-   "fingerprint": "fp_7c1e9a_linux-chrome131-swiftshader-2vcpu",
-   "platform": "Linux x86_64 (Ubuntu 24.04)",
+   "fingerprint": "fp_b04d22_linux-chrome131-swiftshader-4vcpu",
+   "platform": "Linux x86_64 (cloud computer)",
    "browser": "Chrome 131 (headful, virtualized)",
-   "hardware": "2 vCPU, 7.7 GiB, SwiftShader, 1280x720",
-   "cluster": "muse-sandbox"
+   "hardware": "4 vCPU, 16 GiB, SwiftShader, 1440x900",
+   "cluster": "dots-sandbox"
   },
   {
    "id": "dev_520797bf",
-   "fingerprint": "fp_7c1e9a_linux-chrome131-swiftshader-2vcpu",
-   "platform": "Linux x86_64 (Ubuntu 24.04)",
+   "fingerprint": "fp_b04d22_linux-chrome131-swiftshader-4vcpu",
+   "platform": "Linux x86_64 (cloud computer)",
    "browser": "Chrome 131 (headful, virtualized)",
-   "hardware": "2 vCPU, 7.7 GiB, SwiftShader, 1280x720",
-   "cluster": "muse-sandbox"
+   "hardware": "4 vCPU, 16 GiB, SwiftShader, 1440x900",
+   "cluster": "dots-sandbox"
   },
   {
    "id": "dev_89772307",

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { data, vaultFor } from '../store.js'
-import { activeCase, getCase, listCases, openCase, resetCases } from './cases.js'
+import { activeCase, getCase, listCases, openCase, resetCases, submitCase } from './cases.js'
 
 const HERO_IDS = ['dp_doubledip', 'ret_aiphoto', 'ret_loyal_defect', 'dp_signed']
 
@@ -26,6 +26,14 @@ warroomApi.post('/cases/open', async (req, res) => {
     res.status(400).json({ error: (err as Error).message })
   }
 })
+warroomApi.post('/cases/:id/submit', async (req, res) => {
+  try {
+    res.json(await submitCase(req.params.id))
+  } catch (err) {
+    const msg = (err as Error).message
+    res.status(msg === 'case_not_found' ? 404 : 409).json({ error: msg })
+  }
+})
 warroomApi.post('/reset', (_req, res) => {
   resetCases()
   res.json({ ok: true })
@@ -39,7 +47,7 @@ warroomApi.get('/queue', (_req, res) => {
   const summarize = (targetId: string) => {
     const c = latest.get(targetId)
     if (!c) return null
-    return { case_id: c.id, status: c.closed_at ? 'decided' : 'running', tier: c.verdict?.tier ?? null, decision: c.routing?.decision ?? null, staged: Boolean(c.stripe) }
+    return { case_id: c.id, status: c.closed_at ? 'decided' : 'running', tier: c.verdict?.tier ?? null, decision: c.routing?.decision ?? null, staged: Boolean(c.stripe), submitted: Boolean(c.stripe?.submitted) }
   }
   const items: Record<string, unknown>[] = []
   for (const d of data.disputes) {

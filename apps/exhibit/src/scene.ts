@@ -495,8 +495,8 @@ export class ExhibitScene {
         .flatMap((x) => x.g)
       const GOLDEN = Math.PI * (3 - Math.sqrt(5))
       ordered.forEach((c, i) => {
-        const k = i + 2 // leave the centre for the hub
-        const r = 27 * Math.sqrt(k)
+        const k = i + 3 // the first slots belong to the sandbox hubs
+        const r = 30 * Math.sqrt(k)
         const theta = k * GOLDEN
         place(c, r * Math.cos(theta), r * Math.sin(theta))
       })
@@ -507,7 +507,7 @@ export class ExhibitScene {
       const c = byId.get(cid)
       if (!c || c.x === undefined) continue
       const sorted = [...os].sort((a, b) => a.id.localeCompare(b.id))
-      const ringR = sorted.length <= 3 ? 9 : sorted.length <= 8 ? 11.5 : 14.5
+      const ringR = sorted.length <= 3 ? 7.5 : sorted.length <= 8 ? 10 : 13
       const rot = (hash(cid) % 360) * (Math.PI / 180)
       sorted.forEach((o, i) => {
         if (!targetSet.has(o.id) && o.x !== undefined) return
@@ -519,11 +519,18 @@ export class ExhibitScene {
     // 3. The hub at the origin; shared leaves at the centroid of the orders they join; case leaves and
     //    satellites on a small ring around their order.
     const satIndex = new Map<string, number>()
+    const hubs = all.filter((n) => n.population === 'cluster').sort((a, b) => a.id.localeCompare(b.id))
     for (const n of all) {
       if (n.type === 'customer' || n.type === 'order') continue
       if (!targetSet.has(n.id) && n.x !== undefined) continue
       if (n.population === 'cluster') {
-        place(n, 0, 0)
+        const k = hubs.indexOf(n)
+        if (k <= 0) place(n, 0, 0)
+        else {
+          const GOLDEN = Math.PI * (3 - Math.sqrt(5))
+          const r = 30 * Math.sqrt(k)
+          place(n, r * Math.cos(k * GOLDEN), r * Math.sin(k * GOLDEN))
+        }
         continue
       }
       const linkedOrders: FNode[] = []
@@ -545,7 +552,7 @@ export class ExhibitScene {
         const i = satIndex.get(o.id) ?? 0
         satIndex.set(o.id, i + 1)
         const a = (hash(o.id) % 360) * (Math.PI / 180) + Math.PI / 4 + i * (Math.PI / 2.4)
-        place(n, o.x + 8 * Math.cos(a), (o.z ?? 0) + 8 * Math.sin(a))
+        place(n, o.x + 6 * Math.cos(a), (o.z ?? 0) + 6 * Math.sin(a))
       } else {
         const r = rng(hash(n.id))
         place(n, (r() - 0.5) * 40, (r() - 0.5) * 40)
@@ -570,20 +577,20 @@ export class ExhibitScene {
   // ----- node visuals -------------------------------------------------------------------------
 
   private styleOf(n: FNode): { color: string; geo: THREE.BufferGeometry; radius: number; ring: string | null } {
-    if (n.type === 'device' && n.population === 'cluster') return { color: ACCENT.cluster, geo: this.geo.sphere, radius: 2.6, ring: ACCENT.cluster }
+    if (n.type === 'device' && n.population === 'cluster') return { color: ACCENT.cluster, geo: this.geo.sphere, radius: 2.2, ring: ACCENT.cluster }
     if (n.type === 'order') {
       const amount = Number(n.amount) || 120
-      const radius = Math.max(2.1, Math.min(4.8, 1.5 + 0.13 * Math.sqrt(amount)))
+      const radius = Math.max(1.1, Math.min(2.4, 0.8 + 0.07 * Math.sqrt(amount)))
       const flagged = (n.flags ?? []).some((f) => f !== 'established_low_risk' && f !== 'undeclared_agent' && f !== 'declared_unsigned_agent')
       return { color: n.population ? populationOf(n.population).color : NEUTRAL.order, geo: this.geo.sphere, radius, ring: flagged ? ACCENT.flagged : null }
     }
-    if (n.type === 'customer') return { color: NEUTRAL.customer, geo: this.geo.sphere, radius: 3.6, ring: null }
-    if (n.type === 'device') return { color: NEUTRAL.device, geo: this.geo.leaf, radius: 2.0, ring: null }
-    if (n.type === 'address') return { color: NEUTRAL.address, geo: this.geo.address, radius: 2.2, ring: null }
-    if (n.type === 'payment') return { color: NEUTRAL.payment, geo: this.geo.payment, radius: 1.5, ring: null }
-    if (n.type === 'return') return { color: NEUTRAL.return, geo: this.geo.return, radius: 1.9, ring: null }
-    if (n.type === 'dispute') return { color: NEUTRAL.dispute, geo: this.geo.sphere, radius: 2.0, ring: null }
-    return { color: NEUTRAL.evidence, geo: this.geo.leaf, radius: 1.6, ring: null }
+    if (n.type === 'customer') return { color: NEUTRAL.customer, geo: this.geo.sphere, radius: 2.0, ring: null }
+    if (n.type === 'device') return { color: NEUTRAL.device, geo: this.geo.leaf, radius: 1.4, ring: null }
+    if (n.type === 'address') return { color: NEUTRAL.address, geo: this.geo.address, radius: 1.6, ring: null }
+    if (n.type === 'payment') return { color: NEUTRAL.payment, geo: this.geo.payment, radius: 1.1, ring: null }
+    if (n.type === 'return') return { color: NEUTRAL.return, geo: this.geo.return, radius: 1.3, ring: null }
+    if (n.type === 'dispute') return { color: NEUTRAL.dispute, geo: this.geo.sphere, radius: 1.4, ring: null }
+    return { color: NEUTRAL.evidence, geo: this.geo.leaf, radius: 1.2, ring: null }
   }
 
   private buildNode(n: FNode): THREE.Object3D {
@@ -620,7 +627,10 @@ export class ExhibitScene {
     this.visuals.set(n.id, { group, core, mat, outline, outlineMat, ring, radius: st.radius, label: null, pinnedLabel: null, targetOpacity: prevOpacity })
     if (n.type === 'device' && n.population === 'cluster') {
       const v = this.visuals.get(n.id)!
-      v.pinnedLabel = 'Muse sandbox, shared by 37 orders'
+      let spokes = 0
+      for (const l of this.fgLinks.values()) if (idOf(l.target) === n.id) spokes++
+      const name = n.label.replace(/\bmuse\b/i, 'Muse').replace(/\bdots\b/i, 'Dots')
+      v.pinnedLabel = `${name}, ${spokes} orders`
       this.setLabel(n.id, ACCENT.cluster, v.pinnedLabel)
     }
     return group

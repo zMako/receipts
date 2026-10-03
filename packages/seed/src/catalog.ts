@@ -58,6 +58,8 @@ export const HUMAN_DEVICES = [
 
 /** Every Muse session looks the same: one sandbox image, SwiftShader rendering, 2 vCPU, 7.7 GiB. */
 export const MUSE_DEVICE = { platform: 'Linux x86_64 (Ubuntu 24.04)', browser: 'Chrome 131 (headful, virtualized)', hardware: '2 vCPU, 7.7 GiB, SwiftShader, 1280x720' }
+/** Dots runs each agent on its own OpenAI-hosted cloud computer; the browser image is likewise uniform. */
+export const DOTS_DEVICE = { platform: 'Linux x86_64 (cloud computer)', browser: 'Chrome 131 (headful, virtualized)', hardware: '4 vCPU, 16 GiB, SwiftShader, 1440x900' }
 export const AGENT_RUNTIME_DEVICE = { platform: 'Agent runtime', browser: 'HTTP client (signed)', hardware: 'n/a' }
 
 export const RESIDENTIAL_ASNS = [

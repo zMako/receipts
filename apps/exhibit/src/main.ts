@@ -27,6 +27,7 @@ const panel = createPanel(app, {
   onReplay: () => void startReplay(),
   onReset: () => void reset(),
   onOpenCase: (id) => void runLive(id),
+  onSubmit: (caseId) => void submit(caseId),
   onAutoRun: (enabled) => {
     autoRun = enabled
     idleSince = performance.now()
@@ -104,6 +105,22 @@ async function startReplay() {
     replay = null
     setMode('idle')
     lastOverviewAt = performance.now()
+  }
+}
+
+async function submit(caseId: string) {
+  try {
+    const res = await fetch(API.submitCase(caseId), { method: 'POST' })
+    const json = (await res.json().catch(() => ({}))) as { status?: string; error?: string }
+    if (!res.ok) {
+      panel.toast(`Could not submit: ${json.error ?? `HTTP ${res.status}`}`, 'error')
+      panel.render(state)
+      return
+    }
+    panel.toast(`Submitted to Stripe. Dispute status: ${(json.status ?? 'under review').replace(/_/g, ' ')}.`)
+    void refreshQueue()
+  } catch (err) {
+    panel.toast(`Could not reach the server: ${(err as Error).message}`, 'error')
   }
 }
 

@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Rng } from './rng.js'
 import {
-  AGENT_RUNTIME_DEVICE, CITIES, CLOUD_EGRESS_ASNS, FIRST_NAMES, HUMAN_DEVICES, LAST_NAMES, MERCHANT, MUSE_DEVICE,
+  AGENT_RUNTIME_DEVICE, CITIES, CLOUD_EGRESS_ASNS, DOTS_DEVICE, FIRST_NAMES, HUMAN_DEVICES, LAST_NAMES, MERCHANT, MUSE_DEVICE,
   MUSE_UA, PRODUCTS, RESIDENTIAL_ASNS, SIGNED_AGENTS, STREETS,
 } from './catalog.js'
 import type {
@@ -49,10 +49,12 @@ function makeAddress(name: string, id?: string): Address {
   return a
 }
 
-function makeDevice(kind: 'human' | 'muse' | 'agent', id?: string): Device {
+function makeDevice(kind: 'human' | 'muse' | 'dots' | 'agent', id?: string): Device {
   let d: Device
   if (kind === 'muse') {
     d = { id: id ?? `dev_${rng.hex(8)}`, fingerprint: 'fp_7c1e9a_linux-chrome131-swiftshader-2vcpu', ...MUSE_DEVICE, cluster: 'muse-sandbox' }
+  } else if (kind === 'dots') {
+    d = { id: id ?? `dev_${rng.hex(8)}`, fingerprint: 'fp_b04d22_linux-chrome131-swiftshader-4vcpu', ...DOTS_DEVICE, cluster: 'dots-sandbox' }
   } else if (kind === 'agent') {
     d = { id: id ?? `dev_${rng.hex(8)}`, fingerprint: `fp_agent_${rng.hex(6)}`, ...AGENT_RUNTIME_DEVICE, cluster: 'agent-runtime' }
   } else {
@@ -141,7 +143,7 @@ function makeOrder(o: OrderOpts): Order {
   const shipping = subtotal >= 150 ? 0 : 9
   const addr = o.address ?? addresses.find((a) => a.id === o.customer.address_ids[0])!
   const isAgent = o.kind !== 'human'
-  const device = o.device ?? (o.kind === 'muse' || o.kind === 'dots' ? makeDevice('muse') : isAgent ? makeDevice('agent') : devices.find((d) => d.id === o.customer.device_ids[0])!)
+  const device = o.device ?? (o.kind === 'muse' ? makeDevice('muse') : o.kind === 'dots' ? makeDevice('dots') : isAgent ? makeDevice('agent') : devices.find((d) => d.id === o.customer.device_ids[0])!)
   const sessKind = o.kind === 'human' ? 'human' : o.kind === 'signed' ? 'signed' : o.kind === 'declared' ? 'declared' : 'muse'
   const agentOrigin = o.kind === 'signed' ? rng.pick(SIGNED_AGENTS).origin : undefined
   const sess = session(sessKind, device, agentOrigin)

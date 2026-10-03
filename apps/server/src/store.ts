@@ -44,8 +44,11 @@ export function graph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
     edges.push({ source: o.customer_id, target: o.id, type: 'placed' })
     const dev = data.devices.find((d) => d.id === o.session.device_id)
     if (dev) {
-      put({ id: dev.id, type: 'device', label: dev.cluster ? `${dev.cluster}` : `${dev.browser} / ${dev.platform}`, population: dev.cluster ? 'cluster' : undefined })
-      edges.push({ source: o.id, target: dev.id, type: 'used_device' })
+      // Every session of an agent sandbox shares one fingerprint, so the graph shows one hub per sandbox.
+      const hub = dev.cluster && dev.cluster.endsWith('-sandbox')
+      const id = hub ? `hub_${dev.cluster}` : dev.id
+      put({ id, type: 'device', label: hub ? `${dev.cluster!.replace('-sandbox', '')} sandbox` : `${dev.browser} / ${dev.platform}`, population: hub ? 'cluster' : undefined })
+      edges.push({ source: o.id, target: id, type: 'used_device' })
     }
     const addr = data.addresses.find((a) => a.id === o.shipping_address_id)
     if (addr) {

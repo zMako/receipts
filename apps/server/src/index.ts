@@ -2,11 +2,13 @@ import './env.js'
 import express from 'express'
 import { createServer } from 'node:http'
 import { WebSocketServer, WebSocket } from 'ws'
+import { api } from './routes.js'
 
 const app = express()
 app.use(express.json({ limit: '2mb' }))
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'receipts-server' }))
+app.use('/api', api)
 
 const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/live' })

@@ -501,7 +501,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     }
 
     const p = s.stripe
-    const pk = p ? `${s.case?.case_id}:${p.dispute_id}:${Object.keys(p.evidence).length}:${p.submitted}:${p.submitted_status ?? ''}` : ''
+    const pk = p ? `${s.case?.case_id}:${p.dispute_id}:${Object.keys(p.evidence).length}:${p.submitted}:${p.submitted_status ?? ''}:${mode}` : ''
     if (pk !== stripeKey) {
       stripeKey = pk
       stripeDueBy = p?.due_by ?? null
@@ -513,7 +513,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
         const action = !p.submitted && p.stripe_dispute_id && s.case
           ? `<button class="primary" data-submit="${esc(s.case.case_id)}">Approve and submit to Stripe</button>`
           : !p.submitted && !p.stripe_dispute_id
-            ? `<div class="hint">Staged locally; Stripe test mode was unavailable for this case.</div>`
+            ? `<div class="hint">${mode === 'replay' ? 'Offline replay: the package is shown, not sent to Stripe. Run a live case to stage a real test dispute.' : 'Staged locally; Stripe test mode was unavailable for this case.'}</div>`
             : ''
         el.stripe.innerHTML = `<section class="card stripe"><h2>Evidence package <small>staged in Stripe test mode, ${esc(p.stripe_dispute_id ?? p.dispute_id)}</small></h2>${status}<div class="countdown"><span>${fields.length} field${fields.length === 1 ? '' : 's'}, due ${esc(new Date(p.due_by).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</span><b id="p-stripe-due"></b></div>${action ? `<div class="approve">${action}</div>` : ''}<div class="fields">${fields.map(([k, val]) => `<div><span title="${esc(k)}">${esc(words(k))}</span><em title="${esc(val)}">${esc(val)}</em></div>`).join('')}</div>${p.dashboard_url ? `<div class="link"><a href="${esc(p.dashboard_url)}" target="_blank" rel="noreferrer">Open in the Stripe dashboard</a></div>` : ''}</section>`
       } else el.stripe.innerHTML = ''

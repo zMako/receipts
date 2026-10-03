@@ -1,18 +1,16 @@
 /**
- * Exhibit entry point. Loads the graph and stats, builds the scene and panel, connects the live
- * feed, and autoplays the offline double-dip replay once so the exhibit never sits empty.
+ * Exhibit entry point. Builds the product shell and the graph scene, loads the merchant graph and
+ * stats, connects the live feed, and autoplays the offline double-dip replay once so the exhibit
+ * never sits empty.
  */
+import './styles.css'
 import { API, type LiveEvent, type TimedEvent } from './contract'
 import { connectFeed, fetchReplay, playReplay, type ReplayHandle } from './feed'
-import { createPanel, PANEL_WIDTH, type Stats } from './panel'
+import { createPanel, type Stats } from './panel'
 import { ExhibitScene } from './scene'
 import { applyEvent, hasLiveCase, initialState, seedGraph, tick, type State } from './state'
 
 const app = document.getElementById('app')!
-const stage = document.createElement('div')
-stage.id = 'stage'
-stage.style.cssText = 'position:fixed;inset:0;'
-app.appendChild(stage)
 
 let state: State = initialState()
 let replay: ReplayHandle | null = null
@@ -21,12 +19,13 @@ let liveCaseSeenAt = 0
 let lastOverviewAt = 0
 let mode: 'idle' | 'replay' | 'live' = 'idle'
 
-const scene = new ExhibitScene(stage, { panelWidth: PANEL_WIDTH })
 const panel = createPanel(app, {
   onReplay: () => void startReplay(),
-  onLive: () => void runLive(),
+  onLive: () => void runLive('dp_doubledip'),
   onReset: () => void reset(),
+  onOpenCase: (id) => void runLive(id),
 })
+const scene = new ExhibitScene(panel.stage)
 
 function dispatch(event: LiveEvent, source: 'live' | 'replay') {
   if (source === 'live' && replay && event.type !== 'hello') {
@@ -90,21 +89,28 @@ async function startReplay() {
   }
 }
 
-async function runLive() {
+/** Open a hero case live. Dispute ids start with `dp_`, return ids with `ret_`. */
+async function runLive(id: string) {
   stopReplay()
+  const body = id.startsWith('ret_') ? { return_id: id } : { dispute_id: id }
   try {
-    const res = await fetch(API.openCase, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dispute_id: 'dp_doubledip' }) })
+    const res = await fetch(API.openCase, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
     if (res.status === 404) {
       panel.toast('Live war room is not wired on this server yet (POST /api/cases/open returned 404). Showing the offline replay.', 'warn')
       void startReplay()
       return
     }
-    if (!res.ok) {
-      panel.toast(`Could not open live case: HTTP ${res.status}`, 'error')
+    if (res.status === 503) {
+      panel.toast('Agents are not ready yet; try again in a moment.', 'warn')
       return
     }
-    const body = (await res.json().catch(() => ({}))) as { case_id?: string }
-    panel.toast(`Live war room opened${body.case_id ? `: ${body.case_id}` : ''}. Waiting for agents…`)
+    if (!res.ok) {
+      const detail = (await res.json().catch(() => null)) as { error?: string } | null
+      panel.toast(`Could not open live case: ${detail?.error ?? `HTTP ${res.status}`}`, 'error')
+      return
+    }
+    const json = (await res.json().catch(() => ({}))) as { case_id?: string }
+    panel.toast(`Live war room opened${json.case_id ? `: ${json.case_id}` : ''}. Waiting for agents…`)
     setMode('live')
   } catch (err) {
     panel.toast(`Could not reach the server: ${(err as Error).message}`, 'error')
@@ -164,7 +170,7 @@ window.addEventListener('keydown', (e) => {
   const target = e.target as HTMLElement | null
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
   if (e.key === 'r' || e.key === 'R') void startReplay()
-  else if (e.key === 'l' || e.key === 'L') void runLive()
+  else if (e.key === 'l' || e.key === 'L') void runLive('dp_doubledip')
   else if (e.key === 'Escape') void reset()
 })
 

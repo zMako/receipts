@@ -1,0 +1,141 @@
+{
+  "cli_version": "0.11.3",
+  "checkpoint_id": "01M41WTRSTC3AB23REPRGEE2JD",
+  "session_id": "eef042f6-784b-443d-8d36-2b3ce897e58f",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-03T22:05:55.364206Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "save_step_count": 2,
+  "files_touched": [
+    "apps/exhibit/index.html",
+    "apps/exhibit/src/panel.ts",
+    "apps/exhibit/src/styles.css",
+    "apps/exhibit/src/theme.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5-1",
+  "turn_id": "bdd3ca8f0d25",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 2878,
+    "cache_creation_tokens": 395428,
+    "cache_read_tokens": 25598774,
+    "output_tokens": 199813,
+    "api_call_count": 123,
+    "subagent_tokens": {
+      "input_tokens": 2094,
+      "cache_creation_tokens": 880611,
+      "cache_read_tokens": 4413579,
+      "output_tokens": 77955,
+      "api_call_count": 72
+    }
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01686mZoP9G62Erz1EugLwes",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "anthropic-skills:pptx"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4b4f4ecc2ac9",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 36,
+        "end": 37,
+        "entry_ids": [
+          "c3d53159-c411-44d5-a31d-cda30f5cd6f9"
+        ],
+        "tool_use_id": "toolu_01686mZoP9G62Erz1EugLwes"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01686mZoP9G62Erz1EugLwes"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: anthropic-skills:pptx",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01GaC19JKQ4Cv3Az8Aiyv7ub",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "anthropic-skills:deep-research"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4b4f4ecc2ac9",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 107,
+        "end": 108,
+        "entry_ids": [
+          "7a51422c-174b-4874-aacd-af26ed318738"
+        ],
+        "tool_use_id": "toolu_01GaC19JKQ4Cv3Az8Aiyv7ub"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01GaC19JKQ4Cv3Az8Aiyv7ub"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: anthropic-skills:deep-research",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-03T22:05:55.228909Z",
+    "agent_lines": 915,
+    "agent_removed": 313,
+    "human_added": 0,
+    "human_modified": 449,
+    "human_removed": 75,
+    "total_committed": 1363,
+    "total_lines_changed": 2274,
+    "agent_percentage": 54.001759014951624,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 450,
+      "user_lines_removed": 523,
+      "agent_lines_added": 1444,
+      "agent_lines_removed": 314,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7,
+        "apps/exhibit/src/main.ts": 21,
+        "apps/exhibit/src/scene.ts": 416,
+        "apps/exhibit/src/styles.css": 6
+      },
+      "user_removed_per_file": {
+        "apps/exhibit/src/main.ts": 15,
+        "apps/exhibit/src/scene.ts": 507,
+        "apps/exhibit/src/styles.css": 1
+      }
+    }
+  ]
+}

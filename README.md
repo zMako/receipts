@@ -35,10 +35,14 @@ Built in one day at the AI Commerce Gallery hackathon (ZooWork x AI Valley, Octo
    refund plus delivery proof, CE 3.0 qualifying history, or a passkey-authenticated agent token. When
    it represents, it creates the dispute in Stripe test mode and stages the evidence package with
    `submit=false`, so a human approves in the dashboard.
-5. **Exhibit.** A three.js force graph of orders, customers, devices, addresses, cards, returns and
-   disputes. Agents fly to the case node and attach evidence live; ring clusters pull together; the
-   side panel shows the transcript, verdict, routing, VAMP arithmetic and the staged Stripe package
-   with a countdown to the evidence deadline.
+5. **Approval.** The merchant reviews the staged package and submits it with one click. The server
+   calls Stripe's dispute update with `submit=true`; the case shows the dispute's new status.
+6. **Exhibit.** An inbox-first screen: a queue of open chargebacks and claims, a four-step progress
+   bar (pick a case, agents investigate, critic decides, Stripe package), a per-agent outline of
+   findings, and a three.js map of the merchant: customers on a golden-angle spiral with their orders
+   ringed around them, the Muse and Dots sandbox hubs at the centre with spokes to every order they
+   placed, shared devices and addresses between the accounts they join. Opening a case ghosts the rest
+   of the map and lights a spotlight under the cluster while findings land.
 
 ## Stack and sponsors
 
@@ -62,9 +66,10 @@ npm run dev            # server on :8787, provisions agents, starts the Band bri
 npm run exhibit        # exhibit on :5173 (proxies /api and /live to the server)
 ```
 
-Open http://localhost:5173. The exhibit autoplays the offline replay of the double-dip case, then idles.
-Press **L** (or click *Run live*) to open `dp_doubledip` in a real war room; **R** replays offline;
-**Esc** resets.
+Open http://localhost:5173. It opens on the queue. Click any row to open it as a live case; the
+demo cases are listed first. **R** plays the offline replay of the double-dip case, **Esc** goes back
+to the queue, and the **Auto-run queue** toggle opens the next new case by itself after 20 idle
+seconds, for unattended time at the exhibit.
 
 Signed versus unsigned agents at checkout:
 

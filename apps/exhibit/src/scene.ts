@@ -75,6 +75,7 @@ const REST_SCALE = 1.12
 const EDGE_HOT = 0.95
 const EDGE_REST = 0.6
 const EDGE_BASE = 0.55
+const EDGE_HUB = 0.22
 const EDGE_GHOST = 0.07
 const NODE_GHOST = 0.16
 const MAX_LABELS = 40
@@ -222,7 +223,9 @@ export class ExhibitScene {
     const charge = graph.d3Force('charge')
     if (charge && typeof charge.strength === 'function') charge.strength(-34)
     const link = graph.d3Force('link')
-    if (link && typeof link.distance === 'function') link.distance((l: FLink) => (l.type === 'placed' ? 24 : 16))
+    if (link && typeof link.distance === 'function') link.distance((l: FLink) => (this.isHubLink(l) ? 120 : l.type === 'placed' ? 24 : 16))
+    // Spokes from the sandbox hub must not pull orders away from their customers.
+    if (link && typeof link.strength === 'function') link.strength((l: FLink) => (this.isHubLink(l) ? 0.002 : 0.6))
 
     const key = new THREE.DirectionalLight(0xffffff, 1.6)
     key.position.set(0.6, 1.8, 0.9)
@@ -388,6 +391,13 @@ export class ExhibitScene {
         n.x = radius * Math.cos(theta)
         n.y = 0
         n.z = radius * Math.sin(theta)
+        if (n.population === 'cluster') {
+          // The shared sandbox sits at the centre of the map; its spokes radiate to every order it placed.
+          n.x = 0
+          n.z = 0
+          n.fx = 0
+          n.fz = 0
+        }
       }
       this.graph.warmupTicks(240).cooldownTicks(0)
     } else {
@@ -579,7 +589,9 @@ export class ExhibitScene {
   private linkMatOf(key: string): LinkMat {
     let lm = this.linkMats.get(key)
     if (!lm) {
-      lm = { mat: new THREE.MeshBasicMaterial({ color: UI.edge, transparent: true, opacity: EDGE_BASE, depthWrite: false }), targetOpacity: EDGE_BASE }
+      const l = this.fgLinks.get(key)
+      const base = l && this.isHubLink(l) ? EDGE_HUB : EDGE_BASE
+      lm = { mat: new THREE.MeshBasicMaterial({ color: l && this.isHubLink(l) ? ACCENT.cluster : UI.edge, transparent: true, opacity: base, depthWrite: false }), targetOpacity: base }
       this.linkMats.set(key, lm)
     }
     return lm
@@ -610,6 +622,7 @@ export class ExhibitScene {
   private linkWidthOf(l: FLink): number {
     const lm = this.linkMats.get(l.key)
     if (lm?.fxT0 !== undefined) return 1.1
+    if (this.isHubLink(l)) return 0.3
     const s = idOf(l.source)
     const t = idOf(l.target)
     if (this.focusSet && this.focusSet.has(s) && this.focusSet.has(t)) return 0.7
@@ -637,16 +650,28 @@ export class ExhibitScene {
       if (v.pinnedLabel) this.setLabel(id, this.fgNodes.get(id)?.population === 'cluster' ? ACCENT.cluster : ACCENT.flagged, v.pinnedLabel)
       else this.removeLabel(v)
     }
-    for (const lm of this.linkMats.values()) {
+    for (const [key, lm] of this.linkMats) {
       lm.fxT0 = undefined
-      lm.mat.color.set(UI.edge)
-      lm.mat.opacity = EDGE_BASE
+      const l = this.fgLinks.get(key)
+      const hub = l ? this.isHubLink(l) : false
+      lm.mat.color.set(hub ? ACCENT.cluster : UI.edge)
+      lm.mat.opacity = hub ? EDGE_HUB : EDGE_BASE
     }
     this.refreshLinks()
   }
 
+  private isHub(id: string): boolean {
+    return this.fgNodes.get(id)?.population === 'cluster'
+  }
+
+  private isHubLink(l: FLink): boolean {
+    return this.isHub(idOf(l.source)) || this.isHub(idOf(l.target))
+  }
+
+  /** Direct neighbours. The sandbox hub is included as a node but never expanded through. */
   private neighbours(id: string): string[] {
     const out = new Set<string>([id])
+    if (this.isHub(id)) return [...out]
     for (const l of this.fgLinks.values()) {
       const s = idOf(l.source)
       const t = idOf(l.target)
@@ -679,7 +704,8 @@ export class ExhibitScene {
     for (const l of this.fgLinks.values()) {
       const lm = this.linkMatOf(l.key)
       const inFocus = !this.focusSet || (this.focusSet.has(idOf(l.source)) && this.focusSet.has(idOf(l.target)))
-      const target = lm.fxT0 !== undefined ? lm.targetOpacity : inFocus ? EDGE_BASE : EDGE_GHOST
+      const base = this.isHubLink(l) ? EDGE_HUB : EDGE_BASE
+      const target = lm.fxT0 !== undefined ? lm.targetOpacity : inFocus ? base : EDGE_GHOST
       if (lm.targetOpacity !== target) {
         lm.targetOpacity = target
         widthChanged = true

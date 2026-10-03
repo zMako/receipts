@@ -6,7 +6,7 @@
 import './styles.css'
 import { API, type LiveEvent, type TimedEvent } from './contract'
 import { connectFeed, fetchReplay, playReplay, type ReplayHandle } from './feed'
-import { createPanel, type Stats } from './panel'
+import { createPanel, type QueueItem, type Stats } from './panel'
 import { ExhibitScene } from './scene'
 import { applyEvent, hasLiveCase, initialState, seedGraph, tick, type State } from './state'
 
@@ -19,12 +19,28 @@ let liveCaseSeenAt = 0
 let lastOverviewAt = 0
 let mode: 'idle' | 'replay' | 'live' = 'idle'
 
+let autoRun = false
+let queue: QueueItem[] = []
+let idleSince = performance.now()
+
 const panel = createPanel(app, {
   onReplay: () => void startReplay(),
-  onLive: () => void runLive('dp_doubledip'),
   onReset: () => void reset(),
   onOpenCase: (id) => void runLive(id),
+  onAutoRun: (enabled) => {
+    autoRun = enabled
+    idleSince = performance.now()
+    panel.toast(enabled ? 'Auto-run on: the next new case opens after 20 idle seconds.' : 'Auto-run off.')
+  },
 })
+
+async function refreshQueue() {
+  const items = await loadJson<QueueItem[]>('/api/queue')
+  if (items) {
+    queue = items
+    panel.setQueue(items)
+  }
+}
 const scene = new ExhibitScene(panel.stage)
 
 function dispatch(event: LiveEvent, source: 'live' | 'replay') {
@@ -44,7 +60,9 @@ function dispatch(event: LiveEvent, source: 'live' | 'replay') {
   if (event.type === 'case.closed' || event.type === 'reset') {
     if (source === 'live') setMode('idle')
     lastOverviewAt = performance.now()
+    idleSince = performance.now()
   }
+  if (source === 'live' && (event.type === 'case.opened' || event.type === 'case.closed' || event.type === 'verdict' || event.type === 'dispute.routing' || event.type === 'stripe.evidence_staged')) void refreshQueue()
 }
 
 function setMode(m: typeof mode) {
@@ -110,7 +128,8 @@ async function runLive(id: string) {
       return
     }
     const json = (await res.json().catch(() => ({}))) as { case_id?: string }
-    panel.toast(`Live war room opened${json.case_id ? `: ${json.case_id}` : ''}. Waiting for agents…`)
+    panel.toast('Case opened. The critic is briefing the specialists in the Band room.')
+    if (json.case_id) void refreshQueue()
     setMode('live')
   } catch (err) {
     panel.toast(`Could not reach the server: ${(err as Error).message}`, 'error')
@@ -122,11 +141,12 @@ async function reset() {
   dispatch({ type: 'reset' }, 'replay')
   setMode('idle')
   scene.focusOverview()
+  void refreshQueue()
   try {
     const res = await fetch(API.reset, { method: 'POST' })
     if (res.status === 404) panel.toast('Local state cleared (server has no /api/reset yet).', 'info')
     else if (!res.ok) panel.toast(`Server reset failed: HTTP ${res.status}`, 'warn')
-    else panel.toast('Reset.')
+    else panel.toast('Back to the queue.')
   } catch {
     panel.toast('Local state cleared; server unreachable.', 'warn')
   }
@@ -144,7 +164,7 @@ async function loadJson<T>(url: string): Promise<T | null> {
 }
 
 async function boot() {
-  const [graph, stats] = await Promise.all([loadJson<{ nodes: unknown[]; edges: unknown[] }>(API.graph), loadJson<Stats>(API.stats)])
+  const [graph, stats] = await Promise.all([loadJson<{ nodes: unknown[]; edges: unknown[] }>(API.graph), loadJson<Stats>(API.stats), refreshQueue()])
   if (graph) {
     state = seedGraph(state, graph)
     scene.setGraph(state)
@@ -159,10 +179,7 @@ async function boot() {
     onStatus: (status, attempt) => panel.setConnection(status === 'open' ? 'live' : status === 'reconnecting' ? `reconnecting (${attempt})` : status, status === 'open'),
   })
 
-  // Give the server a moment to announce an active case over the socket before autoplaying.
-  window.setTimeout(() => {
-    if (!hasLiveCase(state) && !state.activeCaseId && !replay) void startReplay()
-  }, 1500)
+  window.setInterval(() => void refreshQueue(), 20_000)
 }
 
 window.addEventListener('keydown', (e) => {
@@ -170,7 +187,6 @@ window.addEventListener('keydown', (e) => {
   const target = e.target as HTMLElement | null
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
   if (e.key === 'r' || e.key === 'R') void startReplay()
-  else if (e.key === 'l' || e.key === 'L') void runLive('dp_doubledip')
   else if (e.key === 'Escape') void reset()
 })
 
@@ -188,6 +204,12 @@ function loop(now: number) {
   }
   // A live case that went quiet for a long time should not freeze the exhibit.
   if (mode === 'live' && liveCaseSeenAt && now - liveCaseSeenAt > 10 * 60_000 && !hasLiveCase(state)) setMode('idle')
+  // Unattended gallery mode: after 20 idle seconds, open the next new case.
+  if (autoRun && mode === 'idle' && !state.case && !replay && now - idleSince > 20_000) {
+    idleSince = now
+    const next = queue.find((q) => !q.case)
+    if (next) void runLive(next.id)
+  }
   requestAnimationFrame(loop)
 }
 requestAnimationFrame(loop)

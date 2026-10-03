@@ -460,11 +460,12 @@ for (let i = 0; i < 4; i++) makeOrder({ customer: rng.pick(signedUsers), placedA
 const humanDelivered = orders.filter((o) => o.channel === 'web' && o.fulfillment.delivered_at && !o.scenario)
 for (const o of rng.shuffle(humanDelivered).slice(0, 5)) {
   const reason = rng.pick(['fraudulent', 'product_not_received', 'product_unacceptable'] as const)
-  makeDispute({ order: o, reason, statement: reason === 'fraudulent' ? 'Card was used without my permission.' : reason === 'product_not_received' ? 'Never received the package.' : 'Item arrived damaged and seller ignored me.', status: rng.pick(['needs_response', 'under_review', 'won', 'lost'] as const), is_inquiry: rng.chance(0.3) })
+  const status = rng.pick(['needs_response', 'under_review', 'won', 'lost'] as const)
+  makeDispute({ order: o, reason, statement: reason === 'fraudulent' ? 'Card was used without my permission.' : reason === 'product_not_received' ? 'Never received the package.' : 'Item arrived damaged and seller ignored me.', status, is_inquiry: rng.chance(0.3), createdDaysAgo: status === 'needs_response' ? rng.int(1, 5) : rng.int(8, 40) })
 }
 const museDelivered = orders.filter((o) => o.channel === 'muse' && !o.scenario)
 for (const o of rng.shuffle(museDelivered).slice(0, 3)) {
-  makeDispute({ order: o, reason: rng.pick(['unrecognized', 'fraudulent'] as const), statement: rng.pick(['I don\'t recognise this merchant.', 'My shopping assistant bought this, I never approved it.']), status: rng.pick(['warning_needs_response', 'needs_response'] as const), is_inquiry: rng.chance(0.5) })
+  makeDispute({ order: o, reason: rng.pick(['unrecognized', 'fraudulent'] as const), statement: rng.pick(['I don\'t recognise this merchant.', 'My shopping assistant bought this, I never approved it.']), status: rng.pick(['warning_needs_response', 'needs_response'] as const), is_inquiry: rng.chance(0.5), createdDaysAgo: rng.int(1, 5) })
 }
 
 // ---------------------------------------------------------------------------

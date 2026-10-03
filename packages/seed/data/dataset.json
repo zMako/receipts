@@ -20933,49 +20933,7 @@
  ],
  "disputes": [
   {
-   "id": "dp_test_b5f3f03f_13",
-   "charge_id": "ch_test_9e893f05e4b47f",
-   "order_id": "ord_1034",
-   "network": "visa",
-   "reason": "fraudulent",
-   "reason_code": "10.4",
-   "amount": 163,
-   "is_inquiry": false,
-   "status": "needs_response",
-   "created_at": "2026-08-27T16:00:00.000Z",
-   "evidence_due_by": "2026-09-03T16:00:00.000Z",
-   "cardholder_statement": "Card was used without my permission."
-  },
-  {
-   "id": "dp_test_b9ea1c7b_16",
-   "charge_id": "ch_test_7bc6cbb73e9313",
-   "order_id": "ord_1175",
-   "network": "visa",
-   "reason": "fraudulent",
-   "reason_code": "10.4",
-   "amount": 288,
-   "is_inquiry": false,
-   "status": "needs_response",
-   "created_at": "2026-08-28T16:00:00.000Z",
-   "evidence_due_by": "2026-09-04T16:00:00.000Z",
-   "cardholder_statement": "My shopping assistant bought this, I never approved it."
-  },
-  {
-   "id": "dp_test_3730a72d_10",
-   "charge_id": "ch_test_702ccffb26f165",
-   "order_id": "ord_1144",
-   "network": "mastercard",
-   "reason": "fraudulent",
-   "reason_code": "4837",
-   "amount": 217,
-   "is_inquiry": false,
-   "status": "lost",
-   "created_at": "2026-09-12T16:00:00.000Z",
-   "evidence_due_by": "2026-09-19T16:00:00.000Z",
-   "cardholder_statement": "Card was used without my permission."
-  },
-  {
-   "id": "dp_test_fb2261d1_12",
+   "id": "dp_test_b2261d15_12",
    "charge_id": "ch_test_83e456c07f51a4",
    "order_id": "ord_1013",
    "network": "visa",
@@ -20984,12 +20942,12 @@
    "amount": 157,
    "is_inquiry": true,
    "status": "lost",
-   "created_at": "2026-09-17T16:00:00.000Z",
-   "evidence_due_by": "2026-09-24T16:00:00.000Z",
+   "created_at": "2026-08-24T16:00:00.000Z",
+   "evidence_due_by": "2026-08-31T16:00:00.000Z",
    "cardholder_statement": "Item arrived damaged and seller ignored me."
   },
   {
-   "id": "dp_test_8cea02de_14",
+   "id": "dp_test_cea02de5_14",
    "charge_id": "ch_test_11cfd58f2cf9fa",
    "order_id": "ord_1107",
    "network": "visa",
@@ -20998,12 +20956,12 @@
    "amount": 182,
    "is_inquiry": false,
    "status": "lost",
-   "created_at": "2026-09-18T16:00:00.000Z",
-   "evidence_due_by": "2026-09-25T16:00:00.000Z",
+   "created_at": "2026-09-08T16:00:00.000Z",
+   "evidence_due_by": "2026-09-15T16:00:00.000Z",
    "cardholder_statement": "Card was used without my permission."
   },
   {
-   "id": "dp_test_778dc5e3_11",
+   "id": "dp_test_78dc5e34_11",
    "charge_id": "ch_test_248c64f5062bd4",
    "order_id": "ord_1027",
    "network": "visa",
@@ -21012,26 +20970,26 @@
    "amount": 158,
    "is_inquiry": false,
    "status": "under_review",
-   "created_at": "2026-09-19T16:00:00.000Z",
-   "evidence_due_by": "2026-09-26T16:00:00.000Z",
+   "created_at": "2026-09-10T16:00:00.000Z",
+   "evidence_due_by": "2026-09-17T16:00:00.000Z",
    "cardholder_statement": "Never received the package."
   },
   {
-   "id": "dp_test_82043b7f_15",
-   "charge_id": "ch_test_cd44d7d14e38a8",
-   "order_id": "ord_1177",
-   "network": "visa",
+   "id": "dp_test_730a72d7_10",
+   "charge_id": "ch_test_702ccffb26f165",
+   "order_id": "ord_1144",
+   "network": "mastercard",
    "reason": "fraudulent",
-   "reason_code": "10.4",
-   "amount": 33,
+   "reason_code": "4837",
+   "amount": 217,
    "is_inquiry": false,
-   "status": "warning_needs_response",
-   "created_at": "2026-09-20T16:00:00.000Z",
-   "evidence_due_by": "2026-09-27T16:00:00.000Z",
-   "cardholder_statement": "I don't recognise this merchant."
+   "status": "lost",
+   "created_at": "2026-09-19T16:00:00.000Z",
+   "evidence_due_by": "2026-09-26T16:00:00.000Z",
+   "cardholder_statement": "Card was used without my permission."
   },
   {
-   "id": "dp_test_d46eafc6_17",
+   "id": "dp_test_46eafc60_17",
    "charge_id": "ch_test_eb96738fc6bcde",
    "order_id": "ord_1189",
    "network": "visa",
@@ -21040,9 +20998,37 @@
    "amount": 107,
    "is_inquiry": true,
    "status": "needs_response",
+   "created_at": "2026-09-28T16:00:00.000Z",
+   "evidence_due_by": "2026-10-05T16:00:00.000Z",
+   "cardholder_statement": "I don't recognise this merchant."
+  },
+  {
+   "id": "dp_test_5f3f03fe_13",
+   "charge_id": "ch_test_9e893f05e4b47f",
+   "order_id": "ord_1034",
+   "network": "visa",
+   "reason": "fraudulent",
+   "reason_code": "10.4",
+   "amount": 163,
+   "is_inquiry": false,
+   "status": "needs_response",
    "created_at": "2026-09-29T16:00:00.000Z",
    "evidence_due_by": "2026-10-06T16:00:00.000Z",
-   "cardholder_statement": "I don't recognise this merchant."
+   "cardholder_statement": "Card was used without my permission."
+  },
+  {
+   "id": "dp_test_9ea1c7be_16",
+   "charge_id": "ch_test_7bc6cbb73e9313",
+   "order_id": "ord_1175",
+   "network": "visa",
+   "reason": "fraudulent",
+   "reason_code": "10.4",
+   "amount": 288,
+   "is_inquiry": false,
+   "status": "needs_response",
+   "created_at": "2026-09-29T16:00:00.000Z",
+   "evidence_due_by": "2026-10-06T16:00:00.000Z",
+   "cardholder_statement": "My shopping assistant bought this, I never approved it."
   },
   {
    "id": "dp_signed",
@@ -21060,6 +21046,20 @@
    "scenario": [
     "signed_disputed"
    ]
+  },
+  {
+   "id": "dp_test_2043b7f4_15",
+   "charge_id": "ch_test_cd44d7d14e38a8",
+   "order_id": "ord_1177",
+   "network": "visa",
+   "reason": "fraudulent",
+   "reason_code": "10.4",
+   "amount": 33,
+   "is_inquiry": false,
+   "status": "warning_needs_response",
+   "created_at": "2026-09-30T16:00:00.000Z",
+   "evidence_due_by": "2026-10-07T16:00:00.000Z",
+   "cardholder_statement": "I don't recognise this merchant."
   },
   {
    "id": "dp_doubledip",

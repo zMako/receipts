@@ -1,10 +1,11 @@
 /**
- * Product shell: top bar, left column (case / verdict / routing / Stripe), centre stage card for the
- * graph, right column (agent roster + transcript) and toasts. Plain DOM, no framework.
+ * Product shell. Left: a four-step progress bar, the queue of open chargebacks and claims (when no
+ * case is open) or the case, verdict, routing and Stripe cards. Centre: the graph. Right: the case
+ * outline (each agent with its findings) and a collapsed transcript. Plain DOM, no framework.
  * `render(state)` is called after every event (not per frame); countdowns tick on their own timer.
  */
 import { AGENT_META, AGENT_NAMES, type AgentName } from './contract'
-import type { State, TranscriptLine } from './state'
+import type { State } from './state'
 import { AGENT_COLOR, POPULATION, ROUTING_TINT, TIER_TINT, populationOf, severityOf } from './theme'
 
 export interface Stats {
@@ -16,32 +17,49 @@ export interface Stats {
   vamp?: { ratio?: number; threshold?: number; headroom_items?: number; tc05?: number; tc40?: number; tc15?: number; window?: string }
 }
 
+export interface QueueItem {
+  id: string
+  kind: 'dispute' | 'return'
+  title: string
+  inquiry: boolean
+  order_id: string
+  customer_name: string
+  amount: number
+  due_by: string | null
+  received_at: string
+  population: string
+  flags: string[]
+  statement: string
+  hero: boolean
+  case: { case_id: string; status: 'running' | 'decided'; tier: string | null; decision: string | null; staged: boolean } | null
+}
+
 export type PanelMode = 'idle' | 'replay' | 'live'
 
 export interface PanelHandlers {
   onReplay(): void
-  onLive(): void
   onReset(): void
-  /** Open one of the hero cases live. `id` is a dispute (dp_*) or return (ret_*) id. */
+  /** Open a queue item live. `id` is a dispute (dp_*) or return (ret_*) id. */
   onOpenCase(id: string): void
+  onAutoRun(enabled: boolean): void
 }
 
 export interface Panel {
-  /** Container the three.js scene renders into (inside the centre card). */
   readonly stage: HTMLElement
   render(state: State): void
   setStats(stats: Stats | null): void
+  setQueue(items: QueueItem[]): void
   setConnection(label: string, ok: boolean): void
   setMode(mode: PanelMode): void
   toast(message: string, kind?: 'info' | 'warn' | 'error'): void
   destroy(): void
 }
 
-export const HERO_CASES: { id: string; title: string; brief: string; color: string }[] = [
-  { id: 'dp_doubledip', title: 'Double dip chargeback', brief: 'Refunded on first scan, then disputed as "my agent did it"', color: POPULATION['undeclared-suspected'].color },
-  { id: 'ret_aiphoto', title: 'AI-photo damage claim', brief: 'Synthetic photos, policy-lawyer claim text', color: POPULATION.human.color },
-  { id: 'ret_loyal_defect', title: 'Loyal customer, real defect', brief: 'Six-year customer, genuine seam failure', color: POPULATION.signed.color },
-  { id: 'dp_signed', title: 'Signed agent dispute', brief: 'Web Bot Auth signature on file, cardholder denies', color: POPULATION.declared.color },
+const STEPS = [
+  { title: 'Pick a case', hint: 'Open chargebacks and return claims wait in the queue. Choose one to put the agents on it.' },
+  { title: 'Agents investigate', hint: 'Four specialists pull evidence from the order vault and attach findings. The critic coordinates them in the Band room.' },
+  { title: 'Critic decides', hint: 'A tiered verdict: instant refund, exchange first, refund on inspection, require verification, or decline.' },
+  { title: 'Stripe package', hint: 'For chargebacks: refund-and-close or represent, and the evidence package staged in Stripe for a human to approve.' },
 ]
 
 function esc(s: unknown): string {
@@ -72,6 +90,15 @@ export function formatCountdown(ms: number): string {
   return d > 0 ? `${d}d ${pad(h)}h ${pad(m)}m ${pad(sec)}s` : `${pad(h)}:${pad(m)}:${pad(sec)}`
 }
 
+function dueShort(due: string | null): string {
+  if (!due) return 'no deadline'
+  const ms = new Date(due).getTime() - Date.now()
+  if (ms <= 0) return 'overdue'
+  const d = Math.floor(ms / 86_400_000)
+  if (d >= 1) return `due in ${d} day${d === 1 ? '' : 's'}`
+  return `due in ${Math.max(1, Math.floor(ms / 3_600_000))} h`
+}
+
 function agentColor(agent: AgentName | undefined): string {
   return agent ? AGENT_COLOR[agent] ?? '#94a3b8' : '#94a3b8'
 }
@@ -92,6 +119,13 @@ function toolName(detail: string | null): string {
   return m ? m[1] : detail.slice(0, 24)
 }
 
+function stepOf(s: State): number {
+  if (!s.case) return 0
+  if (s.case.kind === 'dispute' ? s.stripe || s.routing : s.verdict && s.case.closed) return 3
+  if (s.verdict) return 2
+  return 1
+}
+
 export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   root.innerHTML = `
     <header id="topbar">
@@ -101,32 +135,34 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       <div class="chips" id="t-chips"></div>
       <div class="spacer"></div>
       <div class="actions">
-        <button class="ghost" id="b-replay" aria-keyshortcuts="R">Replay<kbd aria-hidden="true">R</kbd></button>
-        <button class="ghost" id="b-live" aria-keyshortcuts="L">Run live<kbd aria-hidden="true">L</kbd></button>
-        <button class="ghost" id="b-reset" aria-keyshortcuts="Escape">Reset<kbd aria-hidden="true">Esc</kbd></button>
+        <label class="toggle" title="When idle, open the next new case automatically"><input type="checkbox" id="b-auto" /><span>Auto-run queue</span></label>
+        <button class="ghost" id="b-replay" aria-keyshortcuts="R">Demo replay<kbd aria-hidden="true">R</kbd></button>
+        <button class="ghost" id="b-reset" aria-keyshortcuts="Escape">Back to queue<kbd aria-hidden="true">Esc</kbd></button>
         <div class="status" id="t-status" role="status" aria-live="polite"><i aria-hidden="true"></i><span>connecting</span></div>
       </div>
     </header>
     <main id="main">
       <div class="col" id="left" aria-label="Case">
-        <section class="card case" id="p-case"></section>
+        <section class="card steps" id="p-steps"></section>
+        <section class="card queue" id="p-queue"></section>
+        <section class="card case" id="p-case" hidden></section>
         <div id="p-verdict"></div>
         <div id="p-routing"></div>
         <div id="p-stripe"></div>
       </div>
       <section id="stage-card" aria-label="Evidence graph">
         <div id="stage"></div>
-        <h2 class="overlay stage-title">Evidence graph<small id="s-sub">Drag to orbit, scroll to zoom, click a node to focus</small></h2>
+        <h2 class="overlay stage-title">Evidence graph<small id="s-sub">Every customer and order. Drag to orbit, scroll to zoom, click a node to focus.</small></h2>
         <div class="overlay legend" id="s-legend" aria-label="Legend"></div>
       </section>
       <aside class="col" id="right" aria-label="Agents and transcript">
-        <section class="card">
-          <h2>Agents <small id="p-room"></small></h2>
+        <section class="card outline">
+          <h2>Investigation <small id="p-room"></small></h2>
           <div class="agents" id="p-agents"></div>
         </section>
-        <section class="card transcript-card">
-          <h2>Transcript <small id="p-count"></small></h2>
-          <div class="transcript" id="p-transcript" aria-live="polite" aria-relevant="additions"><div class="empty">Waiting for agents</div></div>
+        <section class="card transcript-card collapsed" id="p-transcript-card">
+          <h2>Transcript <small id="p-count"></small><button class="ghost small" id="b-transcript">Show</button></h2>
+          <div class="transcript" id="p-transcript" aria-live="polite" aria-relevant="additions"></div>
           <button class="jump" id="p-jump">Jump to latest</button>
         </section>
       </aside>
@@ -138,9 +174,11 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     merchant: $('t-merchant'),
     chips: $('t-chips'),
     status: $('t-status'),
+    auto: $<HTMLInputElement>('b-auto'),
     replay: $<HTMLButtonElement>('b-replay'),
-    live: $<HTMLButtonElement>('b-live'),
     reset: $<HTMLButtonElement>('b-reset'),
+    steps: $('p-steps'),
+    queue: $('p-queue'),
     case: $('p-case'),
     verdict: $('p-verdict'),
     routing: $('p-routing'),
@@ -151,6 +189,8 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     room: $('p-room'),
     agents: $('p-agents'),
     count: $('p-count'),
+    transcriptCard: $('p-transcript-card'),
+    transcriptToggle: $<HTMLButtonElement>('b-transcript'),
     transcript: $('p-transcript'),
     jump: $<HTMLButtonElement>('p-jump'),
     toasts: $('toasts'),
@@ -164,17 +204,21 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     `<div><i class="leaf"></i>Shared device, address or card</div>`
 
   el.replay.addEventListener('click', () => handlers.onReplay())
-  el.live.addEventListener('click', () => handlers.onLive())
   el.reset.addEventListener('click', () => handlers.onReset())
-  el.case.addEventListener('click', (e) => {
+  el.auto.addEventListener('change', () => handlers.onAutoRun(el.auto.checked))
+  el.queue.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-case]')
     if (!btn || btn.disabled) return
     btn.disabled = true
     window.setTimeout(() => (btn.disabled = false), 4000)
     handlers.onOpenCase(btn.dataset.case ?? '')
   })
+  el.transcriptToggle.addEventListener('click', () => {
+    const collapsed = el.transcriptCard.classList.toggle('collapsed')
+    el.transcriptToggle.textContent = collapsed ? 'Show' : 'Hide'
+    if (!collapsed) el.transcript.scrollTop = el.transcript.scrollHeight
+  })
 
-  // Transcript auto-scroll with a "jump to latest" affordance when the reader has scrolled up.
   let stickToBottom = true
   const nearBottom = () => el.transcript.scrollTop + el.transcript.clientHeight >= el.transcript.scrollHeight - 24
   el.transcript.addEventListener('scroll', () => {
@@ -188,18 +232,22 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   })
 
   let stats: Stats | null = null
+  let queue: QueueItem[] = []
   let mode: PanelMode = 'idle'
   let connLabel = 'connecting'
   let connOk = false
   let renderedTranscriptId = 0
   let renderedCaseId: string | null = null
-  let caseEmptyRendered = false
   let lastCaseKey = ''
+  let lastQueueKey = ''
+  let lastStep = -1
+  let lastOutlineKey = ''
   let verdictKey = ''
   let routingKey = ''
   let stripeKey = ''
   let caseDueBy: string | null = null
   let stripeDueBy: string | null = null
+  let lastState: State | null = null
 
   function renderStats() {
     const v = stats?.vamp
@@ -220,35 +268,60 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   function renderStatus() {
     const cls = mode === 'live' ? 'live' : mode === 'replay' ? 'replay' : connOk ? 'live' : 'off'
     el.status.className = `status ${cls}`
-    const text = mode === 'live' ? 'Live case' : mode === 'replay' ? 'Replay' : connLabel === 'live' ? 'Connected' : connLabel
+    const text = mode === 'live' ? 'Live case' : mode === 'replay' ? 'Demo replay' : connLabel === 'live' ? 'Connected' : connLabel
     el.status.querySelector('span')!.textContent = text
     el.replay.classList.toggle('active', mode === 'replay')
-    el.live.classList.toggle('active', mode === 'live')
+  }
+
+  function renderSteps(s: State) {
+    const step = stepOf(s)
+    if (step === lastStep) return
+    lastStep = step
+    el.steps.innerHTML =
+      `<ol class="stepper">${STEPS.map((st, i) => `<li class="${i < step ? 'done' : i === step ? 'current' : ''}"><i>${i + 1}</i><span>${esc(st.title)}</span></li>`).join('')}</ol>` +
+      `<p class="step-hint">${esc(STEPS[step].hint)}</p>`
+  }
+
+  function renderQueue(s: State) {
+    const show = !s.case
+    el.queue.hidden = !show
+    if (!show) return
+    const key = queue.map((q) => `${q.id}:${q.case?.status ?? ''}:${q.case?.tier ?? ''}`).join('|') + `:${s.activeCaseId ?? ''}`
+    if (key === lastQueueKey) return
+    lastQueueKey = key
+    const open = queue.filter((q) => q.case?.status !== 'decided')
+    const decided = queue.filter((q) => q.case?.status === 'decided')
+    const row = (q: QueueItem) => {
+      const p = populationOf(q.population)
+      const status = q.case?.status === 'running' ? `<span class="pill thinking">running</span>` : q.case?.status === 'decided' ? `<span class="pill done">${esc(words(q.case.tier ?? 'decided'))}</span>` : `<span class="pill">new</span>`
+      const risk = q.flags.filter((f) => f !== 'established_low_risk').length
+      return `<button class="qrow" data-case="${esc(q.id)}" title="${esc(q.statement)}">
+        <span class="qkind ${q.kind}">${q.kind === 'dispute' ? (q.inquiry ? 'Inquiry' : 'Chargeback') : 'Return claim'}</span>
+        <span class="qmain"><b>${esc(q.title)}</b><span>${esc(q.customer_name)}${q.hero ? ', demo case' : ''}</span></span>
+        <span class="qmeta"><b class="num">${money(q.amount)}</b><span class="num">${esc(dueShort(q.due_by))}</span></span>
+        <span class="qtags"><i title="${esc(p.label)}" style="background:${p.color}"></i>${risk ? `<em>${risk} flag${risk === 1 ? '' : 's'}</em>` : ''}${status}</span>
+      </button>`
+    }
+    el.queue.innerHTML =
+      `<h2>Queue <small>${open.length} open, ${decided.length} decided</small></h2>` +
+      (queue.length ? `<div class="qlist">${open.map(row).join('')}${decided.length ? `<div class="qsep">Decided</div>${decided.map(row).join('')}` : ''}</div>` : `<div class="hint">Loading the queue</div>`)
   }
 
   function renderCase(s: State) {
     const c = s.case
+    el.case.hidden = !c
     if (!c) {
       caseDueBy = null
-      if (caseEmptyRendered && lastCaseKey === `empty:${s.activeCaseId ?? ''}`) return
-      caseEmptyRendered = true
-      lastCaseKey = `empty:${s.activeCaseId ?? ''}`
-      el.case.className = 'card case empty-state'
-      el.case.innerHTML =
-        `<h2>Case</h2>` +
-        `<div class="lead">No open case</div>` +
-        `<div class="hint">${s.activeCaseId ? `Live case <b>${esc(s.activeCaseId)}</b> is open on the server; waiting for its events.` : 'Open a hero case to start a live war room, or press <b>R</b> for the offline replay.'}</div>` +
-        `<div class="heroes">${HERO_CASES.map((h) => `<button class="hero-btn" data-case="${esc(h.id)}"><div><b>${esc(h.title)}</b><span>${esc(h.brief)}</span></div><code>${esc(h.id)}</code></button>`).join('')}</div>`
+      lastCaseKey = ''
       return
     }
-    caseEmptyRendered = false
     const key = `${c.case_id}:${c.closed}:${c.flags.length}:${c.population}`
     caseDueBy = c.due_by
     if (key === lastCaseKey) return
     lastCaseKey = key
     el.case.className = `card case${c.closed ? ' closed' : ''}`
     el.case.innerHTML =
-      `<h2>${c.kind === 'dispute' ? 'Dispute' : 'Return'} <small>${esc(c.case_id)}</small></h2>` +
+      `<h2>${c.kind === 'dispute' ? 'Chargeback' : 'Return claim'} <small>${esc(c.case_id)}</small></h2>` +
       `<div class="title">${esc(c.title)}</div>` +
       `<div class="amount-row"><span class="hero">${money(c.amount)}</span>${populationBadge(c.population)}</div>` +
       `<div class="sub">${esc(c.customer_name)}, order ${esc(c.order_id)}</div>` +
@@ -258,19 +331,19 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     renderCountdowns()
   }
 
-  function renderAgents(s: State) {
+  function renderOutline(s: State) {
+    const key = `${s.case?.case_id ?? ''}:${s.seq}`
+    if (key === lastOutlineKey) return
+    lastOutlineKey = key
     el.agents.innerHTML = AGENT_NAMES.map((name) => {
       const a = s.agents[name]
       const meta = AGENT_META[name]
-      let pill: string
-      let cls: string
-      if (!a.joined) {
-        pill = 'standby'
-        cls = 'standby'
-      } else {
+      let pill = 'standby'
+      let cls = 'standby'
+      if (a.joined) {
         switch (a.status) {
           case 'thinking':
-            pill = 'investigating'
+            pill = name === 'critic' ? 'weighing evidence' : 'investigating'
             cls = 'thinking'
             break
           case 'tool':
@@ -286,7 +359,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
             cls = 'done'
             break
           case 'error':
-            pill = 'error'
+            pill = 'fell back'
             cls = 'error'
             break
           default:
@@ -294,28 +367,29 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
             cls = 'idle'
         }
       }
-      return `<div class="agent${a.joined ? '' : ' standby'}" title="${esc(meta.brief)}${a.detail ? `. ${esc(a.detail)}` : ''}"><i style="background:${AGENT_COLOR[name]}"></i><div><b>${esc(meta.title)}</b>${a.evidenceCount ? `<small>${a.evidenceCount} evidence</small>` : ''}</div><span class="pill ${cls}">${esc(pill)}</span></div>`
+      const findings = s.evidence.filter((e) => e.agent === name)
+      const body =
+        name === 'critic' && s.verdict
+          ? `<div class="finding verdict-line"><span class="sev" style="background:${(TIER_TINT[s.verdict.tier] ?? { bg: '#F1F5F9' }).bg};color:${(TIER_TINT[s.verdict.tier] ?? { fg: '#334155' }).fg}">${esc(words(s.verdict.tier))}</span><span>${esc(s.verdict.rationale.split(/(?<=\.)\s/)[0])}</span></div>`
+          : findings
+              .map((e) => {
+                const sev = severityOf(e.severity)
+                return `<div class="finding"><span class="sev" style="background:${sev.bg};color:${sev.fg}">${sev.label}</span><span>${esc(e.label)}</span></div>`
+              })
+              .join('')
+      const quiet = !a.joined && !s.case
+      return `<div class="agent ${cls}${quiet ? ' standby' : ''}">
+        <div class="agent-row"><i style="background:${AGENT_COLOR[name]}"></i><b>${esc(meta.title)}</b><small>${esc(meta.brief)}</small><span class="pill ${cls}">${esc(pill)}</span></div>
+        ${body ? `<div class="findings">${body}</div>` : ''}
+      </div>`
     }).join('')
-    el.room.textContent = s.case?.room ? s.case.room.title : ''
-  }
-
-  function evidenceForLine(s: State, l: TranscriptLine) {
-    if (l.kind !== 'status' || !l.text.startsWith('attached ')) return null
-    return s.evidence.find((e) => l.text.endsWith(`evidence: ${e.label ?? e.id}`)) ?? null
-  }
-
-  function evidenceCard(s: State, l: TranscriptLine, ev: NonNullable<ReturnType<typeof evidenceForLine>>): string {
-    const sev = severityOf(ev.severity)
-    const w = Math.max(-1, Math.min(1, Number(ev.weight) || 0))
-    const bar = w >= 0 ? `left:50%;width:${(w * 50).toFixed(1)}%;background:${sev.color}` : `right:50%;width:${(-w * 50).toFixed(1)}%;background:${severityOf('exculpatory').color}`
-    const by = l.agent ? `<span class="by" style="color:${agentColor(l.agent)}">${esc(AGENT_META[l.agent].title)}</span>` : ''
-    return `<div class="ev"><div class="top"><span class="sev" style="background:${sev.bg};color:${sev.fg}">${sev.label}</span><span class="lbl">${esc(ev.label)}</span>${by}</div><div class="detail">${esc(ev.detail)}</div><div class="w"><span>weight</span><div class="bar"><s></s><b style="${bar}"></b></div><span>${w >= 0 ? '+' : ''}${w.toFixed(2)}</span></div></div>`
+    el.room.textContent = s.case?.room ? `Band room: ${s.case.room.title}` : ''
   }
 
   function renderTranscript(s: State) {
     const caseId = s.case?.case_id ?? null
-    if (caseId !== renderedCaseId || s.transcript.length === 0 || (s.transcript[0] && s.transcript[0].id > renderedTranscriptId + 1 && renderedTranscriptId === 0)) {
-      el.transcript.innerHTML = s.transcript.length ? '' : '<div class="empty">Waiting for agents</div>'
+    if (caseId !== renderedCaseId || s.transcript.length === 0) {
+      el.transcript.innerHTML = ''
       renderedTranscriptId = 0
       renderedCaseId = caseId
       stickToBottom = true
@@ -325,18 +399,11 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       el.count.textContent = ''
       return
     }
-    if (renderedTranscriptId === 0) el.transcript.innerHTML = ''
     const fresh = s.transcript.filter((l) => l.id > renderedTranscriptId)
     if (fresh.length) {
       const frag = document.createDocumentFragment()
       for (const l of fresh) {
-        const ev = evidenceForLine(s, l)
         const div = document.createElement('div')
-        if (ev) {
-          div.innerHTML = evidenceCard(s, l, ev)
-          frag.appendChild(div.firstElementChild!)
-          continue
-        }
         div.className = `line ${l.kind}`
         const who = l.agent ? `<span class="who" style="color:${agentColor(l.agent)}">${esc(AGENT_META[l.agent].title)}</span>` : ''
         div.innerHTML = `<i style="background:${l.kind === 'system' ? 'transparent' : agentColor(l.agent)}"></i><div>${who}<span class="${l.kind === 'message' ? 'm' : ''}">${withMentions(l.text)}</span></div>`
@@ -349,7 +416,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       else el.jump.classList.add('show')
     }
     const msgs = s.transcript.filter((l) => l.kind === 'message').length
-    el.count.textContent = `${msgs} message${msgs === 1 ? '' : 's'}, ${s.evidence.length} evidence item${s.evidence.length === 1 ? '' : 's'}`
+    el.count.textContent = `${msgs} message${msgs === 1 ? '' : 's'}`
   }
 
   function renderCards(s: State) {
@@ -359,7 +426,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       verdictKey = vk
       if (v) {
         const tint = TIER_TINT[v.tier] ?? { bg: '#F1F5F9', fg: '#334155', border: '#E2E8F0' }
-        el.verdict.innerHTML = `<section class="card verdict" style="--tint-bg:${tint.bg};--tint-fg:${tint.fg};--tint-border:${tint.border}"><h2>Verdict <small>${v.evidence_ids.length} evidence items</small></h2><div class="hero">${esc(words(v.tier))}</div><div class="conf"><span>Confidence</span><div class="meter"><b style="transform:scaleX(${Math.max(0, Math.min(1, v.confidence)).toFixed(3)})"></b></div><b class="num" style="color:var(--text)">${pct(v.confidence, 0)}</b><span>Abuse score ${v.score.toFixed(2)}</span></div><p>${esc(v.rationale)}</p>${v.policy_citation ? `<div class="cite">${esc(v.policy_citation)}</div>` : ''}</section>`
+        el.verdict.innerHTML = `<section class="card verdict" style="--tint-bg:${tint.bg};--tint-fg:${tint.fg};--tint-border:${tint.border}"><h2>Verdict <small>${v.evidence_ids.length} findings weighed</small></h2><div class="hero">${esc(words(v.tier))}</div><div class="conf"><span>Confidence</span><div class="meter"><b style="transform:scaleX(${Math.max(0, Math.min(1, v.confidence)).toFixed(3)})"></b></div><b class="num" style="color:var(--text)">${pct(v.confidence, 0)}</b></div><p>${esc(v.rationale)}</p>${v.policy_citation ? `<div class="cite">${esc(v.policy_citation)}</div>` : ''}</section>`
       } else el.verdict.innerHTML = ''
     }
 
@@ -369,7 +436,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       routingKey = rk
       if (r) {
         const tint = ROUTING_TINT[r.decision] ?? { bg: '#F1F5F9', fg: '#334155' }
-        el.routing.innerHTML = `<section class="card routing"><h2>Routing <small>${esc(r.dispute_id)}</small></h2><div class="hero"><span class="decision" style="background:${tint.bg};color:${tint.fg}">${esc(words(r.decision))}</span></div><div class="kv"><div><b class="num">${pct(r.vamp.ratio_before)}<span class="arrow">to</span>${pct(r.vamp.ratio_after)}</b><span>VAMP before and after</span></div><div><b class="num">${pct(r.vamp.threshold, 1)}</b><span>Threshold</span></div><div><b class="num">${money(r.expected_recovery)}</b><span>Expected recovery</span></div></div><p>${esc(r.rationale)}</p></section>`
+        el.routing.innerHTML = `<section class="card routing"><h2>Dispute routing <small>${esc(r.dispute_id)}</small></h2><div class="hero"><span class="decision" style="background:${tint.bg};color:${tint.fg}">${esc(words(r.decision))}</span></div><div class="kv"><div><b class="num">${pct(r.vamp.ratio_before)}<span class="arrow">to</span>${pct(r.vamp.ratio_after)}</b><span>VAMP before and after</span></div><div><b class="num">${pct(r.vamp.threshold, 1)}</b><span>Visa threshold</span></div><div><b class="num">${money(r.expected_recovery)}</b><span>Expected recovery</span></div></div><p>${esc(r.rationale)}</p></section>`
       } else el.routing.innerHTML = ''
     }
 
@@ -380,7 +447,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       stripeDueBy = p?.due_by ?? null
       if (p) {
         const fields = Object.entries(p.evidence)
-        el.stripe.innerHTML = `<section class="card stripe"><h2>Stripe representment <small>${esc(p.stripe_dispute_id ?? p.dispute_id)}</small></h2><div class="staged">Staged, not submitted</div><div class="countdown"><span>${fields.length} field${fields.length === 1 ? '' : 's'}, due ${esc(new Date(p.due_by).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</span><b id="p-stripe-due"></b></div><div class="fields">${fields.map(([k, val]) => `<div><span title="${esc(k)}">${esc(k)}</span><em title="${esc(val)}">${esc(val)}</em></div>`).join('')}</div>${p.dashboard_url ? `<div class="link"><a href="${esc(p.dashboard_url)}" target="_blank" rel="noreferrer">Open in Stripe dashboard</a></div>` : ''}</section>`
+        el.stripe.innerHTML = `<section class="card stripe"><h2>Stripe evidence package <small>${esc(p.stripe_dispute_id ?? p.dispute_id)}</small></h2><div class="staged">Staged, not submitted</div><div class="countdown"><span>${fields.length} field${fields.length === 1 ? '' : 's'}, due ${esc(new Date(p.due_by).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}</span><b id="p-stripe-due"></b></div><div class="fields">${fields.map(([k, val]) => `<div><span title="${esc(k)}">${esc(words(k))}</span><em title="${esc(val)}">${esc(val)}</em></div>`).join('')}</div>${p.dashboard_url ? `<div class="link"><a href="${esc(p.dashboard_url)}" target="_blank" rel="noreferrer">Review and submit in Stripe</a></div>` : ''}</section>`
       } else el.stripe.innerHTML = ''
     }
     renderCountdowns()
@@ -401,13 +468,19 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   const countdownTimer = window.setInterval(renderCountdowns, 1000)
 
   function render(s: State) {
+    lastState = s
     try {
       el.merchant.textContent = s.merchant ?? 'Harbor & Pine Outfitters'
+      renderSteps(s)
+      renderQueue(s)
       renderCase(s)
-      renderAgents(s)
+      renderOutline(s)
       renderTranscript(s)
       renderCards(s)
-      el.sub.textContent = s.case ? `${s.case.customer_name}, order ${s.case.order_id}, ${s.evidence.length} evidence item${s.evidence.length === 1 ? '' : 's'}` : 'Drag to orbit, scroll to zoom, click a node to focus'
+      el.reset.hidden = !s.case && mode !== 'replay'
+      el.sub.textContent = s.case
+        ? `Focused on ${s.case.customer_name}'s order ${s.case.order_id}. ${s.evidence.length} finding${s.evidence.length === 1 ? '' : 's'} attached so far.`
+        : 'Every customer and order. Drag to orbit, scroll to zoom, click a node to focus.'
     } catch (err) {
       console.warn('[panel] render failed', err)
     }
@@ -420,6 +493,11 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       stats = next
       renderStats()
     },
+    setQueue(items) {
+      queue = items
+      lastQueueKey = ''
+      if (lastState) renderQueue(lastState)
+    },
     setConnection(label, ok) {
       connLabel = label
       connOk = ok
@@ -428,6 +506,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     setMode(m) {
       mode = m
       renderStatus()
+      if (lastState) el.reset.hidden = !lastState.case && mode !== 'replay'
     },
     toast(message, kind = 'info') {
       const t = document.createElement('div')

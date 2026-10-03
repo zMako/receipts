@@ -1,5 +1,8 @@
 import { Router } from 'express'
+import { data, vaultFor } from '../store.js'
 import { activeCase, getCase, listCases, openCase, resetCases } from './cases.js'
+
+const HERO_IDS = ['dp_doubledip', 'ret_aiphoto', 'ret_loyal_defect', 'dp_signed']
 
 export const warroomApi = Router()
 export const readiness = { agents: false, band: false, error: undefined as string | undefined }
@@ -28,3 +31,31 @@ warroomApi.post('/reset', (_req, res) => {
   res.json({ ok: true })
 })
 warroomApi.get('/ready', (_req, res) => res.json(readiness))
+
+/** The merchant's inbox: open chargebacks and unresolved return claims, with any case outcome so far. */
+warroomApi.get('/queue', (_req, res) => {
+  const latest = new Map<string, ReturnType<typeof listCases>[number]>()
+  for (const c of listCases()) latest.set(c.dispute_id ?? c.return_id ?? '', c)
+  const summarize = (targetId: string) => {
+    const c = latest.get(targetId)
+    if (!c) return null
+    return { case_id: c.id, status: c.closed_at ? 'decided' : 'running', tier: c.verdict?.tier ?? null, decision: c.routing?.decision ?? null, staged: Boolean(c.stripe) }
+  }
+  const items: Record<string, unknown>[] = []
+  for (const d of data.disputes) {
+    if (d.status !== 'needs_response' && d.status !== 'warning_needs_response') continue
+    const v = vaultFor(d.order_id)!
+    items.push({ id: d.id, kind: 'dispute', title: `${d.network === 'visa' ? 'Visa' : 'Mastercard'} ${d.reason_code}, ${d.reason.replace(/_/g, ' ')}`, inquiry: d.is_inquiry, order_id: d.order_id, customer_name: v.customer_name, amount: d.amount, due_by: d.evidence_due_by, received_at: d.created_at, population: v.population, flags: v.flags, statement: d.cardholder_statement, hero: HERO_IDS.includes(d.id), case: summarize(d.id) })
+  }
+  for (const r of data.returns) {
+    if (!(r.status === 'requested' || (r.status === 'received' && !r.refund))) continue
+    const v = vaultFor(r.order_id)!
+    items.push({ id: r.id, kind: 'return', title: `${r.kind.replace(/_/g, ' ')}, ${r.reason.replace(/_/g, ' ')}`, inquiry: false, order_id: r.order_id, customer_name: v.customer_name, amount: r.amount, due_by: null, received_at: r.requested_at, population: v.population, flags: v.flags, statement: r.claim_text, hero: HERO_IDS.includes(r.id), case: summarize(r.id) })
+  }
+  const rank = (it: Record<string, unknown>) => {
+    const c = it.case as { status: string } | null
+    return (c?.status === 'running' ? 0 : it.hero ? 1 : c?.status === 'decided' ? 3 : 2)
+  }
+  items.sort((a, b) => rank(a) - rank(b) || String(a.due_by ?? '9').localeCompare(String(b.due_by ?? '9')) || String(a.received_at).localeCompare(String(b.received_at)))
+  res.json(items)
+})

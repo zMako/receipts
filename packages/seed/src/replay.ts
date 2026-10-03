@@ -34,7 +34,8 @@ export function doubleDipReplay(): TimedEvent[] {
     [14600, { type: 'agent.message', case_id, agent: 'critic', text: 'Verdict: decline second refund, represent dp_doubledip. Evidence package staged for merchant review, due 2026-10-08.', mentions: [] }],
     [15200, { type: 'case.closed', case_id, outcome: 'representment staged; awaiting merchant approval' }],
   ]
-  return seq.map(([at_ms, event]) => ({ at_ms, event }))
+  // Paced like a live run (about 35 seconds) so a reader can follow each finding.
+  return seq.map(([at_ms, event]) => ({ at_ms: Math.round(at_ms * 2.3), event }))
 }
 
 export const REPLAYS: Record<string, () => TimedEvent[]> = { doubledip: doubleDipReplay }

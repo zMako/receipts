@@ -116,7 +116,7 @@ export interface State {
   graph: Graph
   case: ActiveCase | null
   agents: Record<AgentName, AgentState>
-  evidence: EvidenceItem[]
+  evidence: (EvidenceItem & { agent?: AgentName })[]
   verdict: Verdict | null
   routing: Routing | null
   stripe: StripePackage | null
@@ -383,7 +383,8 @@ function reduce(state: State, event: LiveEvent): State {
       if (!ev || typeof ev.id !== 'string') return state
       const nodeIds = Array.isArray(ev.node_ids) ? ev.node_ids.filter((x): x is string => typeof x === 'string') : []
       const already = state.evidence.some((e) => e.id === ev.id)
-      const evidence = already ? state.evidence.map((e) => (e.id === ev.id ? ev : e)) : [...state.evidence, ev]
+      const tagged = { ...ev, agent: isAgent(event.agent) ? event.agent : undefined } as EvidenceItem & { agent?: AgentName }
+      const evidence = already ? state.evidence.map((e) => (e.id === ev.id ? tagged : e)) : [...state.evidence, tagged]
       let graph = withDelta(state.graph, ev.graph)
       // A newly surfaced shared sandbox lights up every seed device in the same cluster: the ring reveal.
       const clusterReveal = (ev.graph?.nodes ?? []).some((n) => n.population === 'cluster')

@@ -15,6 +15,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "http-message-sig": "^0.3.0",
+    "structured-headers": "^2.0.3",
     "web-bot-auth": "^0.2.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"

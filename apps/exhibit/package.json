@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@receipts/seed": "*",
     "3d-force-graph": "^1.80.1",
     "three": "^0.186.1"
   },

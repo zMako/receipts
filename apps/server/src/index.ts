@@ -2,13 +2,20 @@ import './env.js'
 import express from 'express'
 import { createServer } from 'node:http'
 import { WebSocketServer, WebSocket } from 'ws'
+import type { LiveEvent } from '@receipts/seed'
 import { api } from './routes.js'
+import { data } from './store.js'
+import { ensureWarRoomAgents } from './warroom/agents.js'
+import { startBandBridge } from './warroom/band-bridge.js'
+import { activeCase, setBroadcast } from './warroom/cases.js'
+import { readiness, warroomApi } from './warroom/routes.js'
 
 const app = express()
 app.use(express.json({ limit: '2mb' }))
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'receipts-server' }))
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'receipts-server', ...readiness }))
 app.use('/api', api)
+app.use('/api', warroomApi)
 
 const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/live' })
@@ -19,5 +26,32 @@ export function broadcast(type: string, payload: unknown): void {
   for (const client of wss.clients) if (client.readyState === WebSocket.OPEN) client.send(msg)
 }
 
+wss.on('connection', (ws) => {
+  const hello: LiveEvent = { type: 'hello', server_time: new Date().toISOString(), active_case: activeCase()?.id ?? null, merchant: data.merchant.name }
+  ws.send(JSON.stringify({ type: hello.type, payload: hello, at: Date.now() }))
+  // Late joiners get the active case replayed so the exhibit is never out of sync.
+  const c = activeCase()
+  if (c) for (const ev of c.events) ws.send(JSON.stringify({ type: ev.type, payload: ev, at: Date.now() }))
+})
+
+setBroadcast((ev) => broadcast(ev.type, ev))
+
 const port = Number(process.env.PORT ?? 8787)
 server.listen(port, () => console.log(`[receipts] server on http://localhost:${port}`))
+
+if (process.env.WARROOM !== 'off') {
+  void (async () => {
+    try {
+      await ensureWarRoomAgents()
+      readiness.agents = true
+    } catch (err) {
+      readiness.error = (err as Error).message
+      console.error('[warroom] agent provisioning failed:', err)
+    }
+    try {
+      readiness.band = Boolean(await startBandBridge())
+    } catch (err) {
+      console.error('[band] bridge failed, running in-process:', (err as Error).message)
+    }
+  })()
+}

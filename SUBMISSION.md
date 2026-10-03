@@ -19,14 +19,18 @@ filed, and today that is a guess.
 **What we built (today):**
 - A population classifier and per-order evidence vault with CE 3.0 records for humans and identity
   records (Web Bot Auth, Visa Trusted Agent Protocol, shared payment tokens, mandates) for agents.
-- A real Web Bot Auth verifier (RFC 9421, Ed25519, key directory, nonce store) with signed,
-  tampered, replayed, Muse-like and human test clients.
+- A real Web Bot Auth verifier (RFC 9421, Ed25519, key directory, nonce store, content-digest
+  binding so a payment signature names the cart) with signed, unbound, swapped-cart, tampered,
+  replayed, Muse-like and human test clients.
 - A five-agent war room on ZooWork Managed Agents with custom tools over the vault, coordinated
   through Band @mentions, with tiered verdicts and deterministic fallbacks.
-- A VAMP-aware dispute router that creates real Stripe test-mode disputes and stages evidence
-  unsubmitted for human approval.
-- A three.js exhibit with the live evidence graph, agent transcript, verdict, routing and the staged
-  package with a deadline countdown.
+- A VAMP-aware dispute router that creates real Stripe test-mode disputes, stages the evidence
+  unsubmitted, and submits it on the merchant's one-click approval.
+- An inbox-first exhibit: a queue of open chargebacks and claims, a four-step progress bar, a
+  per-agent outline of findings, a node inspector for merchant-level facts, and a three.js map of
+  the merchant (customers on a spiral with their orders, the Muse and Dots sandbox hubs at the
+  centre, shared devices and addresses between linked accounts) that spotlights each case as the
+  evidence lands.
 - A 236-order synthetic merchant with planted abuse patterns: double dip, empty box, bracketing,
   AI-generated damage photos, a five-account ring, a serial returner, and a loyal customer with a
   genuine defect.
@@ -49,8 +53,9 @@ filed, and today that is a guess.
 
 **Links:**
 - Repo: https://github.com/zMako/receipts
-- Demo: live on the laptop at the exhibit station (localhost), plus the Stripe test dashboard and
-  the Band room
+- Video: <paste the unlisted link>
+- Live demo: <paste the cloudflared URL if you set one up>, otherwise on the laptop at the exhibit
+  station, with the Stripe test dashboard and the Band room open beside it
 - Research report behind the idea: reports/Muse Dots merchant pain points.md in the repo
 
 **Team:** Maciej Kopiec (Assistron), built with Claude Code.

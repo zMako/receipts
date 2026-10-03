@@ -9,7 +9,7 @@ export const DECISIONS: RoutingDecision[] = ['refund_and_close', 'representment'
 
 const attachEvidence: CustomToolDeclaration = {
   name: 'attach_evidence',
-  description: 'Attach one finding to the case file. Call once per distinct finding (1 to 4 per case). weight is -1..1 and takes the MERCHANT's side as positive: positive means the claim or dispute should be denied (abuse, double recovery, proven authorisation), negative means the customer's claim looks genuine and should be honoured. node_ids are ids of orders, customers, devices, addresses, returns or disputes the finding touches.',
+  description: 'Attach one finding to the case file. Call once per distinct finding (1 to 4 per case). weight is -1..1 and takes the merchant side as positive: positive means the claim or dispute should be denied (abuse, double recovery, proven authorisation), negative means the customer claim looks genuine and should be honoured. node_ids are ids of orders, customers, devices, addresses, returns or disputes the finding touches.',
   input_schema: {
     type: 'object',
     properties: {

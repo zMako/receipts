@@ -24,7 +24,7 @@ Built today on ZooWork, coordinated through Band, with every Claude Code session
 
 Repo: https://github.com/zMako/receipts
 Video: <paste the unlisted link>
-Live demo: <paste the cloudflared URL, or "on the laptop at the exhibit station">
+Live demo: https://zmako.github.io/receipts/ (forwards to the exhibit running on the team's laptop)
 
 ## Sponsor tracks
 

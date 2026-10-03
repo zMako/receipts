@@ -72,6 +72,12 @@ Claude Code session into the commits, so the build itself is auditable, twenty-p
 payments rail is Stripe in test mode, and the disputes you saw are real. The evidence rules are
 already broken. This is what a merchant stores starting Monday."
 
+## If the tunnel dies (laptop slept, battery)
+
+Run `npx -y cloudflared@0.7.3 tunnel --url http://localhost:5173`, copy the new trycloudflare.com
+URL, then `scripts/demo-link.sh <that url>`. The stable link https://zmako.github.io/receipts/
+follows within a minute, so the submission link never breaks.
+
 ## If something stalls
 
 - Agents slow: the case finishes on its own after 170 s with deterministic fallback evidence.

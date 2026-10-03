@@ -54,8 +54,8 @@ filed, and today that is a guess.
 **Links:**
 - Repo: https://github.com/zMako/receipts
 - Video: <paste the unlisted link>
-- Live demo: <paste the cloudflared URL if you set one up>, otherwise on the laptop at the exhibit
-  station, with the Stripe test dashboard and the Band room open beside it
+- Live demo: https://zmako.github.io/receipts/ (forwards to the exhibit running on the team's
+  laptop), with the Stripe test dashboard and the Band room open beside it at the station
 - Research report behind the idea: reports/Muse Dots merchant pain points.md in the repo
 
 **Team:** Maciej Kopiec (Assistron), built with Claude Code.

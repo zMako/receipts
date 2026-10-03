@@ -1,0 +1,14 @@
+{
+  "name": "receipts",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Agent-era evidence vault and dispute war room for merchants",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w apps/server",
+    "exhibit": "npm run dev -w apps/exhibit",
+    "verify": "npm run verify -w apps/server",
+    "typecheck": "tsc -b"
+  },
+  "engines": { "node": ">=20" }
+}

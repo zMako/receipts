@@ -1,0 +1,92 @@
+{
+  "cli_version": "0.11.3",
+  "checkpoint_id": "01M41T8EXC3VTC95KXZJCF4QQC",
+  "session_id": "fac12d79-e077-4871-9eb4-bb9435fb9ffe",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-03T21:21:00.042894Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "apps/exhibit/package.json",
+    "apps/server/package.json",
+    "apps/server/scripts/smoke.ts",
+    "apps/server/src/index.ts",
+    "apps/server/src/zoowork.ts",
+    "package-lock.json"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5-1",
+  "turn_id": "f340afb93a84",
+  "checkpoint_transcript_start": 115,
+  "transcript_lines_at_start": 115,
+  "compact_transcript_start": 15,
+  "token_usage": {
+    "input_tokens": 66,
+    "cache_creation_tokens": 24778,
+    "cache_read_tokens": 181456,
+    "output_tokens": 3042,
+    "api_call_count": 3
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-03T21:20:59.98156Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 1628,
+    "human_modified": 78,
+    "human_removed": 0,
+    "total_committed": 1628,
+    "total_lines_changed": 1731,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 3296,
+      "user_lines_removed": 78,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7,
+        "apps/exhibit/package.json": 2,
+        "apps/exhibit/src/contract.ts": 68,
+        "apps/exhibit/src/feed.ts": 196,
+        "apps/exhibit/src/state.test.ts": 218,
+        "apps/exhibit/src/state.ts": 490,
+        "apps/server/package.json": 3,
+        "apps/server/scripts/agents/all.ts": 28,
+        "apps/server/scripts/agents/common.ts": 62,
+        "apps/server/scripts/agents/human.ts": 31,
+        "apps/server/scripts/agents/muse.ts": 34,
+        "apps/server/scripts/agents/signed.ts": 82,
+        "apps/server/scripts/agents/standalone-server.ts": 16,
+        "apps/server/scripts/watch.ts": 30,
+        "apps/server/src/index.ts": 35,
+        "apps/server/src/verify/classifyRequest.ts": 127,
+        "apps/server/src/verify/index.ts": 5,
+        "apps/server/src/verify/keys.ts": 71,
+        "apps/server/src/verify/router.ts": 107,
+        "apps/server/src/verify/types.ts": 48,
+        "apps/server/src/verify/webBotAuth.ts": 340,
+        "apps/server/src/warroom/agents.ts": 39,
+        "apps/server/src/warroom/band-bridge.ts": 74,
+        "apps/server/src/warroom/cases.ts": 387,
+        "apps/server/src/warroom/routes.ts": 30,
+        "apps/server/src/warroom/stripe.ts": 96,
+        "apps/server/src/warroom/tools.ts": 175,
+        "apps/server/src/zoowork.ts": 91,
+        "package-lock.json": 404
+      },
+      "user_removed_per_file": {
+        "apps/server/scripts/smoke.ts": 58,
+        "apps/server/src/index.ts": 1,
+        "apps/server/src/zoowork.ts": 18,
+        "package-lock.json": 1
+      }
+    }
+  ]
+}

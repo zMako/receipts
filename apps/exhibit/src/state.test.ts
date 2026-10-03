@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict'
 import { AGENT_META as CONTRACT_AGENT_META, AGENT_NAMES as CONTRACT_AGENT_NAMES, API as CONTRACT_API, doubleDipReplay, type LiveEvent } from '@receipts/seed'
 import { AGENT_META, AGENT_NAMES, API } from './contract'
+import { parseFrame } from './feed'
 import { applyEvent, hasLiveCase, initialState, seedGraph, tick, type State } from './state'
 
 let passed = 0
@@ -213,6 +214,18 @@ check('unknown and malformed events do not throw', () => {
   assert.equal(s.seq, bad.length)
   assert.ok(s.unknownEvents >= 5)
   assert.ok(!s.case)
+})
+
+check('feed frames parse per the contract', () => {
+  const ev = { type: 'agent.joined', case_id: 'c', agent: 'critic', handle: 'critic-agent' }
+  assert.deepEqual(parseFrame(JSON.stringify({ type: 'agent.joined', payload: ev, at: 1 })), ev)
+  assert.deepEqual(parseFrame({ type: 'agent.joined', payload: ev, at: 1 }), ev)
+  assert.deepEqual(parseFrame(JSON.stringify({ type: 'reset', payload: {}, at: 1 })), { type: 'reset' })
+  assert.deepEqual(parseFrame(JSON.stringify(ev)), ev)
+  assert.equal(parseFrame('not json'), null)
+  assert.equal(parseFrame(JSON.stringify({ at: 1 })), null)
+  assert.equal(parseFrame(null), null)
+  assert.equal(parseFrame(JSON.stringify({ type: 'x', payload: 'garbage' })), null)
 })
 
 console.log(`\n${passed} checks passed${process.exitCode ? ', with failures' : ''}`)

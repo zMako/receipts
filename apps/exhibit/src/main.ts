@@ -115,6 +115,7 @@ async function reset() {
   stopReplay()
   dispatch({ type: 'reset' }, 'replay')
   setMode('idle')
+  scene.focusOverview()
   try {
     const res = await fetch(API.reset, { method: 'POST' })
     if (res.status === 404) panel.toast('Local state cleared (server has no /api/reset yet).', 'info')

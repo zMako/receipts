@@ -52,6 +52,7 @@ export async function startBandBridge(): Promise<Transport | null> {
       try {
         const msg = await me.client.nextMessage(room.id)
         if (!msg) return
+        console.log(`[band] ${me.role} <- ${msg.sender_name}: ${msg.content.slice(0, 70).replace(/\n/g, ' ')}`)
         await me.client.markProcessing(room.id, msg.id)
         try {
           const caseId = caseOf(msg)

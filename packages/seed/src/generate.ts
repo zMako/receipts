@@ -205,8 +205,8 @@ function makeOrder(o: OrderOpts): Order {
   return order
 }
 
-function photo(kind: 'genuine' | 'synthetic' | 'reused'): ClaimPhoto {
-  if (kind === 'genuine') return { id: `ph_${rng.hex(6)}`, filename: `IMG_${rng.int(1000, 9999)}.HEIC`, exif_present: true, camera_model: rng.pick(['iPhone 16 Pro', 'Pixel 9', 'Galaxy S25']), generator_watermark: false, duplicated_region_score: round2(rng.next() * 0.12), taken_at: iso(daysAgo(rng.int(1, 20))) }
+function photo(kind: 'genuine' | 'synthetic' | 'reused', takenAt?: Date): ClaimPhoto {
+  if (kind === 'genuine') return { id: `ph_${rng.hex(6)}`, filename: `IMG_${rng.int(1000, 9999)}.HEIC`, exif_present: true, camera_model: rng.pick(['iPhone 16 Pro', 'Pixel 9', 'Galaxy S25']), generator_watermark: false, duplicated_region_score: round2(rng.next() * 0.12), taken_at: iso(takenAt ?? daysAgo(rng.int(1, 20))) }
   if (kind === 'synthetic') return { id: `ph_${rng.hex(6)}`, filename: `damage_${rng.int(1, 9)}.png`, exif_present: false, camera_model: null, generator_watermark: true, duplicated_region_score: round2(0.7 + rng.next() * 0.25), taken_at: null }
   return { id: `ph_${rng.hex(6)}`, filename: `return_${rng.int(1, 9)}.jpg`, exif_present: false, camera_model: null, generator_watermark: false, duplicated_region_score: round2(0.4 + rng.next() * 0.3), taken_at: null }
 }
@@ -344,7 +344,7 @@ for (const c of humans) {
 for (const o of rng.shuffle(orders).slice(0, 18)) {
   if (!o.fulfillment.delivered_at) continue
   const reason = rng.pick(['wrong_size', 'changed_mind', 'defective', 'wrong_size'])
-  makeReturn({ order: o, reason, claim_text: reason === 'defective' ? 'Zipper failed on the second wear.' : reason === 'wrong_size' ? 'Runs small, need the next size up.' : 'Decided against it, unworn with tags.', photos: reason === 'defective' ? [photo('genuine')] : [], refund: rng.chance(0.8) ? 'after_inspection' : 'pending' })
+  makeReturn({ order: o, reason, claim_text: reason === 'defective' ? 'Zipper failed on the second wear.' : reason === 'wrong_size' ? 'Runs small, need the next size up.' : 'Decided against it, unworn with tags.', photos: reason === 'defective' ? [photo('genuine', addDays(new Date(o.fulfillment.delivered_at), 3))] : [], refund: rng.chance(0.8) ? 'after_inspection' : 'pending' })
 }
 
 // ---------------------------------------------------------------------------
@@ -352,9 +352,11 @@ for (const o of rng.shuffle(orders).slice(0, 18)) {
 // ---------------------------------------------------------------------------
 const loyal = makeCustomer({ id: 'cus_loyal', createdDaysAgo: 640, tags: ['vip'], name: 'Elena Lindqvist' })
 heroes.loyal_customer = loyal.id
-for (let k = 0; k < 14; k++) makeOrder({ customer: loyal, placedAt: daysAgo(12 + k * 44), kind: 'human' })
-const loyalOrder = orders.find((o) => o.customer_id === loyal.id)!
-heroes.loyal_defect_return = makeReturn({ id: 'ret_loyal_defect', order: loyalOrder, kind: 'damage_claim', reason: 'defective', claim_text: 'The seam on the left sleeve came apart after one hike. Photos attached. Happy with an exchange if easier.', photos: [photo('genuine'), photo('genuine')], daysAfterDelivery: 9, inbound: 'none', refund: 'pending', scenario: ['legit_defect', 'loyal'] }).id
+for (let k = 1; k < 14; k++) makeOrder({ customer: loyal, placedAt: daysAgo(12 + k * 44), kind: 'human' })
+const loyalOrder = makeOrder({ id: 'ord_loyal_defect', customer: loyal, placedAt: daysAgo(14), kind: 'human', lines: [line(PRODUCTS[0], { size: 'M', color: 'Olive' })], scenario: ['legit_defect', 'loyal'] })
+const loyalDelivered = new Date(loyalOrder.fulfillment.delivered_at!)
+heroes.loyal_defect_order = loyalOrder.id
+heroes.loyal_defect_return = makeReturn({ id: 'ret_loyal_defect', order: loyalOrder, kind: 'damage_claim', reason: 'defective', claim_text: 'The seam on the left sleeve of the Ridgeline jacket came apart after one hike. Photos attached. Happy with an exchange if easier.', photos: [photo('genuine', addDays(loyalDelivered, 6)), photo('genuine', addDays(loyalDelivered, 6))], daysAfterDelivery: 6, inbound: 'none', refund: 'pending', scenario: ['legit_defect', 'loyal'] }).id
 
 // ---------------------------------------------------------------------------
 // Hero: serial returner (75% return rate, refund-as-a-service vocabulary)

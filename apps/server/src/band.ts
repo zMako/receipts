@@ -43,6 +43,7 @@ export class BandAgentClient {
 
   private async req<T>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T | null }> {
     const res = await fetch(`${BASE}${path}`, {
+      signal: AbortSignal.timeout(12_000),
       method,
       headers: {
         'X-API-Key': this.apiKey,

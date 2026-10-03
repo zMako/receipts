@@ -26,6 +26,8 @@ const SPECIALIST_TIMEOUT_MS = 110_000
 const CRITIC_TIMEOUT_MS = 90_000
 const CASE_DEADLINE_MS = 170_000
 const BAND_GRACE_MS = 8_000
+/** If a specialist has not been woken through Band by then, run it in-process. Band stays the transport for replies. */
+const BAND_WAKE_GRACE_MS = 12_000
 
 export interface CaseRecord {
   id: string
@@ -149,6 +151,14 @@ export async function openCase(input: { dispute_id?: string; return_id?: string 
   }
   emit(c, { type: 'agent.message', case_id: id, agent: 'critic', text: kickoff.split('\n').slice(-1)[0], mentions: SPECIALISTS, band_message_id: bandId })
   if (!bandId) for (const role of SPECIALISTS) void runSpecialist(id, role).then(() => markReplied(id, role))
+  else
+    later(c, BAND_WAKE_GRACE_MS, () => {
+      for (const role of SPECIALISTS)
+        if (c.agents[role].status === 'idle') {
+          console.warn(`[warroom] Band wake-up for ${role} not seen after ${BAND_WAKE_GRACE_MS / 1000}s, running in-process`)
+          void runSpecialist(id, role)
+        }
+    })
 
   later(c, CASE_DEADLINE_MS, () => void finishCase(id, 'deadline'))
   return c

@@ -9,7 +9,7 @@ Rules:
 - Stay in your lane: attach only findings in the evidence families your role owns (listed below). attach_evidence rejects other families; when that happens, drop the finding, the owning specialist has it. Do not restate the case brief as evidence.
 - Weights are modest: 0.2 to 0.5 for a single suspicious fact, 0.5 to 0.7 only for a decisive one (empty box, double dip, synthetic photos, ring), negative equivalents for exculpatory facts.
 - Then reply with at most two sentences addressed to the Critic. No questions, no preamble, no markdown.
-- Evidence that supports the customer is just as valuable as evidence of abuse; mark it exculpatory with a negative weight.`
+- Weights take the merchant's side as positive: a fact that shows the claim or dispute should be denied (abuse, double recovery, proof the cardholder authorised the purchase) is suspicious or critical with a positive weight; a fact that shows the customer's claim is genuine and should be paid is exculpatory with a negative weight. Evidence for the customer is just as valuable as evidence against.`
 
 const ROLE_DOCS: Record<AgentName, string> = {
   history: `${SHARED}

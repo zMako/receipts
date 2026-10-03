@@ -262,7 +262,6 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   el.reset.addEventListener('click', () => handlers.onReset())
 
   let stats: Stats | null = null
-  let last: State | null = null
   let renderedTranscriptId = 0
   let renderedCaseId: string | null = null
   let evidenceCount = -1
@@ -438,7 +437,6 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
 
   function render(s: State) {
     try {
-      last = s
       el.merchant.textContent = s.merchant ?? 'Harbor & Pine Outfitters'
       renderCase(s)
       renderAgents(s)
@@ -486,7 +484,6 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       legend.remove()
       hint.remove()
       style.remove()
-      last = null
     },
   }
 }

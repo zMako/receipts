@@ -39,6 +39,8 @@ export function parseFrame(raw: unknown): LiveEvent | null {
     if (typeof f.type === 'string') return { ...(payload as object), type: f.type } as LiveEvent
     return null
   }
+  // An envelope whose payload is unusable carries nothing.
+  if ('payload' in f) return null
   // Bare event (no envelope).
   if (typeof f.type === 'string' && f.type !== '') return frame as LiveEvent
   return null

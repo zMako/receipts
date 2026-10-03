@@ -629,7 +629,6 @@ export class ExhibitScene {
           for (const a of AGENT_NAMES) this.avatars[a].mode = 'idle'
           this.refreshLinks()
           this.rotateSpeed = 0.45
-          this.focusOverview()
           break
         }
         default:

@@ -12,7 +12,9 @@ import { readiness, warroomApi } from './warroom/routes.js'
 import { setBroadcaster, verifyRouter } from './verify/index.js'
 
 const app = express()
-app.use(express.json({ limit: '2mb' }))
+app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => {
+  ;(req as express.Request & { rawBody?: Buffer }).rawBody = buf
+} }))
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'receipts-server', ...readiness }))
 app.use('/api', api)

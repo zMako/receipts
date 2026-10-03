@@ -44,6 +44,8 @@ export interface AgentState {
   lastMessage: string | null
   /** Count of evidence items this agent attached in the active case. */
   evidenceCount: number
+  /** How the agent was woken: through the Band room or the server's in-process fallback. */
+  via: 'band' | 'in-process' | null
 }
 
 export interface TranscriptLine {
@@ -140,7 +142,7 @@ const DECAY_TAU_S = 3.2
 
 function blankAgents(): Record<AgentName, AgentState> {
   const out = {} as Record<AgentName, AgentState>
-  for (const name of AGENT_NAMES) out[name] = { name, joined: false, handle: null, status: 'idle', detail: null, lastMessage: null, evidenceCount: 0 }
+  for (const name of AGENT_NAMES) out[name] = { name, joined: false, handle: null, status: 'idle', detail: null, lastMessage: null, evidenceCount: 0, via: null }
   return out
 }
 
@@ -377,7 +379,7 @@ function reduce(state: State, event: LiveEvent): State {
 
     case 'agent.joined': {
       if (!isAgent(event.agent)) return state
-      const agents = { ...state.agents, [event.agent]: { ...state.agents[event.agent], joined: true, handle: event.handle ?? null, status: 'idle' as AgentStatus } }
+      const agents = { ...state.agents, [event.agent]: { ...state.agents[event.agent], joined: true, handle: event.handle ?? null, status: 'idle' as AgentStatus, via: event.via === 'band' || event.via === 'in-process' ? event.via : null } }
       return { ...state, agents, transcript: line(state, { kind: 'status', agent: event.agent, text: 'joined the room' }) }
     }
 

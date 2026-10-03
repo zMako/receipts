@@ -43,7 +43,7 @@ export type LiveEvent =
   | { type: 'hello'; server_time: string; active_case: string | null; merchant: string }
   | { type: 'checkout.observed'; order_id: string; population: AgentPopulation; score: number; signals: { signal: string; detail: string; weight: number }[]; signature?: { signature_agent: string; keyid: string; tag: string; verified: boolean; reason?: string } }
   | { type: 'case.opened'; case_id: string; kind: 'return' | 'dispute'; order_id: string; customer_id: string; customer_name: string; title: string; summary: string; amount: number; population: AgentPopulation; flags: string[]; room: { id: string; title: string } | null; due_by?: string }
-  | { type: 'agent.joined'; case_id: string; agent: AgentName; handle: string }
+  | { type: 'agent.joined'; case_id: string; agent: AgentName; handle: string; via?: 'band' | 'in-process' }
   | { type: 'agent.status'; case_id: string; agent: AgentName; status: 'thinking' | 'tool' | 'posting' | 'done' | 'error'; detail?: string }
   | { type: 'agent.message'; case_id: string; agent: AgentName; text: string; mentions: AgentName[]; band_message_id?: string }
   | { type: 'evidence.attached'; case_id: string; agent: AgentName; evidence: EvidenceItem }

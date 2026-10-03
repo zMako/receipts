@@ -151,7 +151,7 @@ export async function openCase(input: { dispute_id?: string; return_id?: string 
   })
 
   // Critic kicks off: the brief goes to the room, mentions wake the specialists.
-  emit(c, { type: 'agent.joined', case_id: id, agent: 'critic', handle: 'critic-agent' })
+  emit(c, { type: 'agent.joined', case_id: id, agent: 'critic', handle: 'critic-agent', via: transport ? 'band' : 'in-process' })
   c.agents.critic.status = 'posting'
   const kickoff = `${brief(c)}\n@history pull the customer record. @identity classify the session and check linkage. @logistics trace delivery and any return. @forensics inspect the claim.`
   let bandId: string | undefined
@@ -232,11 +232,11 @@ function attach(c: CaseRecord, agent: AgentName, item: Omit<EvidenceItem, 'id'>)
   return ev
 }
 
-export async function runSpecialist(caseId: string, role: AgentName): Promise<void> {
+export async function runSpecialist(caseId: string, role: AgentName, via: 'band' | 'in-process' = 'in-process'): Promise<void> {
   const c = cases.get(caseId)
   if (!c || c.closed_at || c.agents[role].status !== 'idle') return
   c.agents[role].status = 'thinking'
-  emit(c, { type: 'agent.joined', case_id: c.id, agent: role, handle: `${role}-agent` })
+  emit(c, { type: 'agent.joined', case_id: c.id, agent: role, handle: `${role}-agent`, via })
   emit(c, { type: 'agent.status', case_id: c.id, agent: role, status: 'thinking' })
   const ctx: ToolContext = { caseId, orderId: c.order_id, agent: role, attach: (a, item) => attach(c, a, item), verdict: () => ({ ok: false, error: 'not the critic' }), route: () => ({ ok: false, error: 'not the critic' }) }
   const prompt = `${brief(c)}\n\nYou are ${role}. Investigate with your tools, attach your findings, then reply to the Critic in at most two sentences.`

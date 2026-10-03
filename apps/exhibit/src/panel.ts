@@ -52,6 +52,7 @@ export interface Panel {
   setStats(stats: Stats | null): void
   setQueue(items: QueueItem[]): void
   setConnection(label: string, ok: boolean): void
+  setAutoRun(enabled: boolean): void
   setMode(mode: PanelMode): void
   toast(message: string, kind?: 'info' | 'warn' | 'error'): void
   destroy(): void
@@ -331,11 +332,13 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     lastQueueKey = key
     const open = queue.filter((q) => q.case?.status !== 'decided')
     const decided = queue.filter((q) => q.case?.status === 'decided')
+    const running = queue.find((q) => q.case?.status === 'running')
     const row = (q: QueueItem) => {
       const p = populationOf(q.population)
       const status = q.case?.status === 'running' ? `<span class="pill thinking">running</span>` : q.case?.status === 'decided' ? `<span class="pill done">${esc(words(q.case.tier ?? 'decided'))}</span>` : `<span class="pill">new</span>`
       const risk = q.flags.filter((f) => f !== 'established_low_risk').length
-      return `<button class="qrow" data-case="${esc(q.id)}" title="${esc(q.statement)}">
+      const blocked = Boolean(running && running.id !== q.id)
+      return `<button class="qrow" data-case="${esc(q.id)}" title="${esc(q.statement)}"${blocked ? ' disabled' : ''}>
         <span class="qkind ${q.kind}">${q.kind === 'dispute' ? (q.inquiry ? 'Inquiry' : 'Chargeback') : 'Return claim'}</span>
         <span class="qmain"><b>${esc(q.title)}</b><span>${esc(q.customer_name)}${q.hero ? ', demo case' : ''}</span></span>
         <span class="qmeta"><b class="num">${money(q.amount)}</b><span class="num">${esc(dueShort(q.due_by))}</span></span>
@@ -344,6 +347,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     }
     el.queue.innerHTML =
       `<h2>Queue <small>${open.length} open, ${decided.length} decided</small></h2>` +
+      (running ? `<div class="hint running-hint">One case at a time. ${esc(running.customer_name)}'s case is running; wait for it to finish or press Esc.</div>` : '') +
       (queue.length ? `<div class="qlist">${open.map(row).join('')}${decided.length ? `<div class="qsep">Decided</div>${decided.map(row).join('')}` : ''}</div>` : `<div class="hint">Loading the queue</div>`)
   }
 
@@ -426,7 +430,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
               .join('')
       const quiet = !a.joined && !s.case
       return `<div class="agent ${cls}${quiet ? ' standby' : ''}">
-        <div class="agent-row"><i style="background:${AGENT_COLOR[name]}"></i><b>${esc(meta.title)}</b><small>${esc(meta.brief)}</small><span class="pill ${cls}">${esc(pill)}</span></div>
+        <div class="agent-row"><i style="background:${AGENT_COLOR[name]}"></i><b>${esc(meta.title)}</b><small>${esc(meta.brief)}</small>${a.joined && a.via ? `<span class="via ${a.via}">${a.via === 'band' ? 'via Band' : 'in-process'}</span>` : ''}<span class="pill ${cls}">${esc(pill)}</span></div>
         ${body ? `<div class="findings">${body}</div>` : ''}
       </div>`
     }).join('')
@@ -552,6 +556,9 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       queue = items
       lastQueueKey = ''
       if (lastState) renderQueue(lastState)
+    },
+    setAutoRun(enabled) {
+      el.auto.checked = enabled
     },
     setConnection(label, ok) {
       connLabel = label

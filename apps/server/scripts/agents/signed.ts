@@ -3,6 +3,7 @@
  * then replays two negative cases: a tampered signature and a reused nonce.
  *   RECEIPTS_URL=http://localhost:8790 npx tsx scripts/agents/signed.ts
  */
+import { createHash } from 'node:crypto'
 import { createSignature, type RequestDescriptor } from 'http-message-sig'
 import { generateNonce } from 'web-bot-auth'
 import { signerFromJWK } from 'web-bot-auth/crypto'
@@ -13,7 +14,7 @@ export const AGENT_NAME = 'cartwright'
 export const AGENT_URI = `${BASE}/agents/${AGENT_NAME}`
 export const TAG = 'agent-payer-auth'
 
-export async function signedHeaders(opts: { nonce?: string; tag?: string; created?: number; ttl?: number } = {}): Promise<Record<string, string>> {
+export async function signedHeaders(opts: { nonce?: string; tag?: string; created?: number; ttl?: number; body?: unknown; bindBody?: boolean } = {}): Promise<Record<string, string>> {
   const key = await ensureAgentKey(AGENT_NAME)
   const signer = await signerFromJWK(key.private_jwk)
   const headers: Record<string, string> = {
@@ -23,11 +24,13 @@ export async function signedHeaders(opts: { nonce?: string; tag?: string; create
     'signature-agent': `"${AGENT_URI}"`,
     'x-receipts-telemetry': JSON.stringify({ hover_events: 0, scroll_events: 0, duration_s: 4, path: 'straight', checkout_ms: 900, pages: 2 }),
   }
+  const bindBody = opts.bindBody ?? true
+  if (bindBody) headers['content-digest'] = `sha-256=:${createHash('sha256').update(JSON.stringify(opts.body ?? CART)).digest('base64')}:`
   const descriptor: RequestDescriptor = { kind: 'request', method: 'POST', targetUri: `${BASE}/api/checkout`, fields: Object.entries(headers).map(([name, value]) => ({ name, value })) }
   const created = opts.created ?? Math.floor(Date.now() / 1000)
   const fields = await createSignature(descriptor, {
     label: 'sig1',
-    components: ['@authority', '@method', '@path', 'signature-agent'],
+    components: bindBody ? ['@authority', '@method', '@path', 'signature-agent', 'content-digest'] : ['@authority', '@method', '@path', 'signature-agent'],
     parameters: { created, expires: created + (opts.ttl ?? 300), nonce: opts.nonce ?? generateNonce(), keyid: signer.keyid, alg: 'ed25519', tag: opts.tag ?? TAG },
     signer,
   })
@@ -55,6 +58,14 @@ export async function run(): Promise<{ results: ClientResult[]; responses: Check
   const r1 = await postCheckout(good, CART)
   printResult('cartwright: signed checkout', r1)
   assertOrExit(r1.population === 'signed' && r1.signature?.verified === true, 'signed -> population signed, verified true')
+
+  const unbound = await postCheckout(await signedHeaders({ bindBody: false }), CART)
+  printResult('cartwright: signed, body not bound', unbound)
+  assertOrExit(unbound.signature?.verified === false && unbound.signature?.reason === 'body_not_bound', 'unbound -> verified false (body_not_bound)')
+
+  const swapped = await postCheckout(await signedHeaders({ body: CART }), { ...(CART as object), lines: [{ sku: 'HP-PRK-SUMMIT', qty: 3 }] })
+  printResult('cartwright: signature for a different cart', swapped)
+  assertOrExit(swapped.signature?.verified === false && swapped.signature?.reason === 'content_digest_mismatch', 'swapped cart -> verified false (content_digest_mismatch)')
 
   const r2 = await postCheckout(tamper(await signedHeaders()), CART)
   printResult('cartwright: tampered signature', r2)

@@ -8,7 +8,9 @@ import { verifyRouter, setBroadcaster } from '../../src/verify/index.js'
 
 const app = express()
 app.set('trust proxy', true)
-app.use(express.json({ limit: '2mb' }))
+app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => {
+  ;(req as express.Request & { rawBody?: Buffer }).rawBody = buf
+} }))
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'receipts-verify-standalone' }))
 app.use(verifyRouter)
 setBroadcaster((type, payload) => console.log(`[broadcast] ${type} ${JSON.stringify(payload).slice(0, 160)}…`))

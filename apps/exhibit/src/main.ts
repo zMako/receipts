@@ -28,7 +28,13 @@ let mode: 'idle' | 'replay' | 'live' = 'idle'
 const seenClosed = new Set<string>()
 let escapeArmedAt = 0
 
-let autoRun = false
+let autoRun = (() => {
+  try {
+    return localStorage.getItem('receipts.autorun') === '1'
+  } catch {
+    return false
+  }
+})()
 let queue: QueueItem[] = []
 let idleSince = performance.now()
 
@@ -39,6 +45,11 @@ const panel = createPanel(app, {
   onSubmit: (caseId) => void submit(caseId),
   onAutoRun: (enabled) => {
     autoRun = enabled
+    try {
+      localStorage.setItem('receipts.autorun', enabled ? '1' : '0')
+    } catch {
+      /* private mode */
+    }
     idleSince = performance.now()
     panel.toast(enabled ? 'Auto-run on: the next new case opens after 20 idle seconds.' : 'Auto-run off.')
   },
@@ -51,6 +62,7 @@ async function refreshQueue() {
     panel.setQueue(items)
   }
 }
+panel.setAutoRun(autoRun)
 const scene = new ExhibitScene(panel.stage)
 const inspector = createInspector(panel.stage.parentElement ?? panel.stage, {
   onOpenCase: (id) => {
@@ -139,6 +151,10 @@ function loadReplayEvents(): Promise<TimedEvent[]> {
 }
 
 async function startReplay() {
+  if (mode === 'live' && state.case && !state.case.closed) {
+    panel.toast('A live case is running. Press Esc to go back to the queue first.', 'warn')
+    return
+  }
   stopReplay()
   const gen = ++replayGen
   let events: TimedEvent[]

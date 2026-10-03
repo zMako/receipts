@@ -12,6 +12,7 @@
  * `web-bot-auth`'s own `verify()` pins `tag` to "web-bot-auth"; agent commerce also uses
  * `agent-browser-auth` and `agent-payer-auth`, so the profile checks are implemented here instead.
  */
+import { createHash } from 'node:crypto'
 import type { NextFunction, Request, RequestHandler, Response } from 'express'
 import { isSignatureError, verifySignature, type RequestDescriptor, type FieldOccurrence } from 'http-message-sig'
 import { HTTP_MESSAGE_SIGNATURES_DIRECTORY, parseSignatureAgentHeader, type JSONWebKeySet, type SignatureAgentEntry } from 'web-bot-auth'
@@ -47,6 +48,8 @@ export type VerifyFailureReason =
   | 'signature_agent_not_covered'
   | 'signature_agent_type_unsupported'
   | 'authority_not_covered'
+  | 'body_not_bound'
+  | 'content_digest_mismatch'
   | 'directory_unreachable'
   | 'directory_malformed'
   | 'key_not_in_directory'
@@ -324,6 +327,17 @@ export async function verifySignedRequest(req: Request, opts: VerifyAgentOptions
   partial.signature_agent = agentEntry.uri
   if (agentEntry.type !== 'directory') return fail('signature_agent_type_unsupported', `discovery type ${agentEntry.type} is not supported; use a key directory`)
   if (!candidate.components.some((c) => (c.name === '@authority' || c.name === '@target-uri') && c.params.size === 0)) return fail('authority_not_covered', 'signature must cover bare @authority or @target-uri')
+  // Payment-grade signatures must bind the body: a signature that covers only the route proves who
+  // sent some request, not which cart was bought. Checked before the expensive directory fetch.
+  if (tag === 'agent-payer-auth') {
+    if (!candidate.components.some((c) => c.name === 'content-digest' && c.params.size === 0)) return fail('body_not_bound', 'agent-payer-auth signatures must cover content-digest so the signed request names the cart')
+    const digestHeader = String(req.headers['content-digest'] ?? '')
+    const raw = (req as typeof req & { rawBody?: Buffer }).rawBody
+    const m = /sha-256=:([A-Za-z0-9+/=]+):/.exec(digestHeader)
+    if (!m || !raw) return fail('content_digest_mismatch', 'Content-Digest sha-256 header or raw body missing')
+    const actual = createHash('sha256').update(raw).digest('base64')
+    if (actual !== m[1]) return fail('content_digest_mismatch', 'Content-Digest does not match the request body')
+  }
 
   let agentUrl: URL
   try {

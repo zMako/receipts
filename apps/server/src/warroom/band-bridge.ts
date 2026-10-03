@@ -59,7 +59,7 @@ export async function startBandBridge(): Promise<Transport | null> {
           const caseId = caseOf(msg)
           const from = byId.get(msg.sender_id)
           if (caseId && me.role === 'critic' && from && from !== 'critic') markReplied(caseId, from)
-          else if (caseId && me.role !== 'critic' && from === 'critic' && !msg.content.startsWith('[verdict]')) void runSpecialist(caseId, me.role)
+          else if (caseId && me.role !== 'critic' && from === 'critic' && !msg.content.startsWith('[verdict]')) void runSpecialist(caseId, me.role, 'band')
         } finally {
           await me.client.markProcessed(room.id, msg.id)
         }

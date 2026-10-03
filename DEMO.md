@@ -65,6 +65,10 @@ instant. And a signed-agent order disputed as fraud: the passkey-authenticated t
 cardholder authorised it, so we represent with the token as evidence. Receipts is not a bot
 blocker. It is a scored decision on every claim, with the receipts attached."
 
+If asked about Moss: "The next piece is ring detection across claims: similar claim texts, shared
+fingerprints, reused photos. Moss's on-device, sub-10 ms retrieval is where that index lives,
+because it has to run inside the merchant's own environment."
+
 ## 2:50 Close (10 s)
 
 "Built today. The agents run on ZooWork. Band is the room they coordinate in. Entire captured every

@@ -555,7 +555,7 @@ a:hover {
 
 .kv {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 8px;
   margin-top: 12px;
 }
@@ -574,6 +574,8 @@ a:hover {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kv span {
@@ -739,6 +741,11 @@ a:hover {
   transform: rotate(45deg);
 }
 
+#stage-card .legend i.torus {
+  background: transparent !important;
+  border: 3px solid #94a3b8;
+}
+
 .gl-tip {
   font: 12px/1.4 var(--font);
   color: var(--text);
@@ -766,8 +773,15 @@ a:hover {
   padding: 4px 8px;
   white-space: nowrap;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-  transform: translateY(-6px);
-  animation: rise 300ms var(--ease);
+  /* CSS2DRenderer positions the label with an inline transform every frame; a running transform
+     animation would override it and park the pill at the stage origin, so only opacity fades in. */
+  animation: fade 300ms var(--ease);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
 }
 
 .gl-label i {
@@ -1515,4 +1529,115 @@ a:hover {
   margin-top: 10px;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* ---------- node inspector ---------- */
+
+.inspector {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 3;
+  width: 340px;
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px 16px;
+  animation: rise 250ms var(--ease);
+  scrollbar-width: thin;
+}
+
+.inspector .i-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inspector .i-kind {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.inspector .i-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector .i-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.inspector .i-row b {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.inspector .i-muted {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.inspector .i-dl {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 6px 10px;
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.inspector .i-dl dt {
+  color: var(--muted);
+}
+
+.inspector .i-dl dd {
+  margin: 0;
+  color: #334155;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inspector .i-flags {
+  margin-top: 10px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.inspector .i-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.primary.small {
+  width: auto;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+@media (max-width: 1500px) {
+  .inspector {
+    width: 300px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inspector {
+    animation: none;
+  }
 }

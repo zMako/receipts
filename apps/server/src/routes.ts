@@ -30,7 +30,8 @@ api.get('/stats', (_req, res) => {
 api.get('/orders', (req, res) => {
   const population = typeof req.query.population === 'string' ? req.query.population : undefined
   const flag = typeof req.query.flag === 'string' ? req.query.flag : undefined
-  const limit = Math.min(Number(req.query.limit ?? 500), 1000)
+  const n = Number(req.query.limit)
+  const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 1000) : 500
   const rows = allVaults()
     .filter((v) => !population || v.population === population)
     .filter((v) => !flag || v.flags.includes(flag))

@@ -203,7 +203,9 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     (['human', 'signed', 'declared', 'undeclared-suspected'] as const).map((k) => `<div><i style="background:${POPULATION[k].color}"></i>Order, ${POPULATION[k].label.toLowerCase()}</div>`).join('') +
     `<div><i class="ring" style="--pink:${POPULATION.cluster.color}"></i>Agent sandbox (Muse, Dots)</div>` +
     `<div><i class="ring" style="--pink:#EF4444"></i>Flagged order</div>` +
-    `<div><i class="leaf"></i>Shared device, address or card</div>`
+    `<div><i style="background:#EF4444"></i>Dispute</div>` +
+    `<div><i class="torus"></i>Return</div>` +
+    `<div><i class="leaf"></i>Device, address, card or evidence</div>`
 
   el.replay.addEventListener('click', () => handlers.onReplay())
   el.reset.addEventListener('click', () => handlers.onReset())
@@ -217,6 +219,17 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   })
   // Approve and submit: a two-click confirm instead of a modal.
   let confirmTimer = 0
+  let submitWatchdog = 0
+  /** Put a 'Submitting' button back to its armed-less state so a failed submit can be retried. */
+  function resetSubmit() {
+    window.clearTimeout(submitWatchdog)
+    const btn = el.stripe.querySelector<HTMLButtonElement>('button[data-submit]')
+    if (!btn || !btn.disabled) return
+    btn.disabled = false
+    btn.dataset.armed = '0'
+    btn.textContent = 'Approve and submit to Stripe'
+    btn.classList.remove('armed')
+  }
   el.stripe.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-submit]')
     if (!btn || btn.disabled) return
@@ -236,6 +249,9 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
     btn.disabled = true
     btn.textContent = 'Submitting'
     handlers.onSubmit(btn.dataset.submit ?? '')
+    // A successful submit re-renders the card from a `stripe.submitted` event; a failed one only
+    // toasts an error (which resets the button) or hangs, so a watchdog restores it either way.
+    submitWatchdog = window.setTimeout(resetSubmit, 30_000)
   })
   el.transcriptToggle.addEventListener('click', () => {
     const collapsed = el.transcriptCard.classList.toggle('collapsed')
@@ -356,7 +372,14 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   }
 
   function renderOutline(s: State) {
-    const key = `${s.case?.case_id ?? ''}:${s.seq}`
+    // Keyed on what the outline shows, not on `seq`: rebuilding per event replays the fade-in.
+    const key = [
+      s.case?.case_id ?? '',
+      s.case?.room?.title ?? '',
+      ...AGENT_NAMES.map((n) => `${s.agents[n].joined}:${s.agents[n].status}:${s.agents[n].detail ?? ''}`),
+      s.evidence.map((e) => `${e.id}:${e.agent ?? ''}`).join(','),
+      s.verdict ? `${s.verdict.tier}:${s.verdict.rationale}` : '',
+    ].join('|')
     if (key === lastOutlineKey) return
     lastOutlineKey = key
     el.agents.innerHTML = AGENT_NAMES.map((name) => {
@@ -541,6 +564,7 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
       if (lastState) el.reset.hidden = !lastState.case && mode !== 'replay'
     },
     toast(message, kind = 'info') {
+      if (kind === 'error') resetSubmit()
       const t = document.createElement('div')
       t.className = `toast ${kind}`
       t.textContent = message

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { AGENT_META as CONTRACT_AGENT_META, AGENT_NAMES as CONTRACT_AGENT_NAMES, API as CONTRACT_API, doubleDipReplay, type LiveEvent } from '@receipts/seed'
 import { AGENT_META, AGENT_NAMES, API } from './contract'
 import { parseFrame } from './feed'
-import { applyEvent, hasLiveCase, initialState, seedGraph, tick, type State } from './state'
+import { applyEvent, hasLiveCase, initialState, isForeignCaseEvent, seedGraph, tick, type State } from './state'
 
 let passed = 0
 function check(name: string, fn: () => void) {
@@ -182,7 +182,9 @@ check('every event type in the contract is handled', () => {
   // reset wiped the case but kept the seed graph and merchant
   assert.equal(s.case, null)
   assert.equal(s.evidence.length, 0)
-  assert.equal(s.graph.nodes.length, 7)
+  // 7 seed nodes plus the ord_new checkout order, which is a real order and survives the reset.
+  assert.equal(s.graph.nodes.length, 8)
+  assert.ok(s.graph.byId['ord_new'])
   assert.equal(s.merchant, 'M')
 
   // mid-stream checks on a copy
@@ -215,6 +217,37 @@ check('unknown and malformed events do not throw', () => {
   assert.equal(s.seq, bad.length)
   assert.ok(s.unknownEvents >= 5)
   assert.ok(!s.case)
+})
+
+check('events from another case never touch the case on screen', () => {
+  let s = seedGraph(initialState(), seed)
+  s = applyEvent(s, { type: 'case.opened', case_id: 'case_a', kind: 'dispute', order_id: 'ord_doubledip', customer_id: 'cus_doubledip', customer_name: 'Theo', title: 'A', summary: 's', amount: 10, population: 'human', flags: [], room: null })
+  assert.ok(!isForeignCaseEvent(s, { type: 'agent.joined', case_id: 'case_a', agent: 'critic', handle: 'c' }))
+  assert.ok(isForeignCaseEvent(s, { type: 'agent.joined', case_id: 'case_b', agent: 'critic', handle: 'c' }))
+  assert.ok(!isForeignCaseEvent(s, { type: 'case.opened', case_id: 'case_b', kind: 'dispute', order_id: 'ord_other', customer_id: 'cus_doubledip', customer_name: 'Theo', title: 'B', summary: 's', amount: 10, population: 'human', flags: [], room: null }))
+  const before = s
+  s = applyEvent(s, { type: 'evidence.attached', case_id: 'case_b', agent: 'history', evidence: { id: 'ev_b', family: 'velocity', label: 'x', detail: 'x', severity: 'critical', weight: 0.1, node_ids: ['ord_other'] } })
+  s = applyEvent(s, { type: 'verdict', case_id: 'case_b', tier: 'instant_refund', confidence: 0.9, score: 0.9, rationale: 'r', evidence_ids: [] })
+  s = applyEvent(s, { type: 'case.closed', case_id: 'case_b', outcome: 'done' })
+  assert.equal(s.evidence.length, 0)
+  assert.equal(s.verdict, null)
+  assert.equal(s.case?.closed, false)
+  assert.equal(s.transcript.length, before.transcript.length)
+  assert.equal(s.seq, before.seq + 3, 'foreign events still count as applied')
+  s = applyEvent(s, { type: 'case.closed', case_id: 'case_a', outcome: 'done' })
+  assert.equal(s.case?.closed, true)
+  assert.ok(!hasLiveCase(s))
+})
+
+check('checkout orders survive a case opening', () => {
+  let s = seedGraph(initialState(), seed)
+  s = applyEvent(s, { type: 'checkout.observed', order_id: 'ord_fresh', population: 'signed', score: 0.1, signals: [], signature: { verified: true, signature_agent: 'muse', keyid: 'k', tag: 't' } })
+  assert.ok(s.graph.byId['ord_fresh'])
+  s = applyEvent(s, { type: 'case.opened', case_id: 'case_c', kind: 'return', order_id: 'ord_doubledip', customer_id: 'cus_doubledip', customer_name: 'Theo', title: 'C', summary: 's', amount: 1, population: 'human', flags: [], room: null })
+  assert.ok(s.graph.byId['ord_fresh'], 'checkout node kept through case.opened')
+  s = applyEvent(s, { type: 'reset' })
+  assert.ok(s.graph.byId['ord_fresh'], 'checkout node kept through reset')
+  assert.equal(s.graph.nodes.filter((n) => n.id === 'ord_fresh').length, 1)
 })
 
 check('feed frames parse per the contract', () => {

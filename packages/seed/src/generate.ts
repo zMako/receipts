@@ -173,8 +173,11 @@ function makeOrder(o: OrderOpts): Order {
     payment = cardFor(o.customer)
   }
 
-  const shippedAt = addDays(o.placedAt, rng.int(1, 2))
-  const delivered = o.delivered ?? true
+  // Nothing in the fulfillment timeline may run past NOW: a parcel shipped yesterday has not been delivered yet.
+  const shippedAt = new Date(Math.min(addDays(o.placedAt, rng.int(1, 2)).getTime(), NOW.getTime() - 3_600_000))
+  const deliveredAt = addDays(shippedAt, rng.int(2, 5))
+  const proof = rng.pick(['scan', 'scan', 'photo', 'signature'] as const)
+  const delivered = (o.delivered ?? true) && deliveredAt < NOW
   const order: Order = {
     id,
     charge_id: `ch_test_${rng.hex(14)}`,
@@ -195,8 +198,8 @@ function makeOrder(o: OrderOpts): Order {
       carrier: rng.pick(['UPS', 'USPS', 'FedEx'] as const),
       tracking: `1Z${rng.hex(16).toUpperCase()}`,
       shipped_at: iso(shippedAt),
-      delivered_at: delivered ? iso(addDays(shippedAt, rng.int(2, 5))) : null,
-      proof_of_delivery: delivered ? rng.pick(['scan', 'scan', 'photo', 'signature'] as const) : null,
+      delivered_at: delivered ? iso(deliveredAt) : null,
+      proof_of_delivery: delivered ? proof : null,
       delivery_address_match: o.deliveryAddressMatch ?? true,
     },
     confirmation_email: { sent_at: iso(addMin(o.placedAt, 1)), to: o.customer.email, subject: `Order ${id.replace('ord_', '#')} confirmed` },
@@ -231,7 +234,9 @@ interface ReturnOpts {
 function makeReturn(o: ReturnOpts): ReturnRequest {
   const id = o.id ?? `ret_${returnSeq++}`
   const delivered = o.order.fulfillment.delivered_at ? new Date(o.order.fulfillment.delivered_at) : new Date(o.order.placed_at)
-  const requestedAt = addDays(delivered, o.daysAfterDelivery ?? rng.int(1, 25))
+  // The return timeline must not run past NOW: cap the request date, and only scan / receive / refund once those dates have passed.
+  const maxAfter = Math.max(1, Math.floor((NOW.getTime() - delivered.getTime()) / DAY) - 1)
+  const requestedAt = new Date(Math.min(addDays(delivered, Math.min(o.daysAfterDelivery ?? rng.int(1, 25), maxAfter)).getTime(), NOW.getTime() - 2 * 3_600_000))
   const idx = o.lineIdx ?? [0]
   const lines = idx.map((i) => {
     const l = o.order.lines[i]
@@ -248,15 +253,27 @@ function makeReturn(o: ReturnOpts): ReturnRequest {
     const firstScan = addDays(requestedAt, rng.int(1, 4))
     const received = addDays(firstScan, rng.int(2, 5))
     const w = inbound === 'match' ? Math.round(expected * (0.95 + rng.next() * 0.1) + 40) : inbound === 'empty' ? rng.int(140, 220) : Math.round(expected * 0.45)
-    carrier_inbound = { tracking: `RT${rng.hex(14).toUpperCase()}`, first_scan_at: iso(firstScan), received_at: iso(received), inbound_weight_g: w, expected_weight_g: expected }
-    status = 'received'
+    const tracking = `RT${rng.hex(14).toUpperCase()}`
+    if (firstScan > NOW) {
+      carrier_inbound = { tracking, first_scan_at: null, received_at: null, inbound_weight_g: null, expected_weight_g: expected }
+      status = 'label_issued'
+    } else if (received > NOW) {
+      carrier_inbound = { tracking, first_scan_at: iso(firstScan), received_at: null, inbound_weight_g: null, expected_weight_g: expected }
+      status = 'in_transit'
+    } else {
+      carrier_inbound = { tracking, first_scan_at: iso(firstScan), received_at: iso(received), inbound_weight_g: w, expected_weight_g: expected }
+      status = 'received'
+    }
   }
-  if (o.refund === 'auto_on_scan' && carrier_inbound) {
-    refund = { amount, issued_at: iso(addMin(new Date(carrier_inbound.first_scan_at!), rng.int(1, 9))), trigger: 'carrier_scan' }
+  if (o.refund === 'auto_on_scan' && carrier_inbound?.first_scan_at) {
+    refund = { amount, issued_at: iso(addMin(new Date(carrier_inbound.first_scan_at), rng.int(1, 9))), trigger: 'carrier_scan' }
     status = 'refunded'
-  } else if (o.refund === 'after_inspection' && carrier_inbound) {
-    refund = { amount, issued_at: iso(addDays(new Date(carrier_inbound.received_at!), rng.int(1, 3))), trigger: 'inspection' }
-    status = 'refunded'
+  } else if (o.refund === 'after_inspection' && carrier_inbound?.received_at) {
+    const issuedAt = addDays(new Date(carrier_inbound.received_at), rng.int(1, 3))
+    if (issuedAt <= NOW) {
+      refund = { amount, issued_at: iso(issuedAt), trigger: 'inspection' }
+      status = 'refunded'
+    }
   } else if (o.refund === 'instant') {
     refund = { amount, issued_at: iso(addMin(requestedAt, rng.int(2, 30))), trigger: 'instant' }
     status = 'refunded'
@@ -309,7 +326,9 @@ function makeDispute(o: DisputeOpts): Dispute {
     duplicate: ['12.6', '4834'],
     unrecognized: ['10.4', '4837'],
   }
-  const created = daysAgo(o.createdDaysAgo ?? rng.int(3, 40))
+  // A dispute can only be raised after the order existed (and after delivery, when it was delivered).
+  const orderAge = Math.floor((NOW.getTime() - new Date(o.order.fulfillment.delivered_at ?? o.order.placed_at).getTime()) / DAY)
+  const created = daysAgo(Math.max(1, Math.min(o.createdDaysAgo ?? rng.int(3, 40), orderAge - 1)))
   const d: Dispute = {
     id,
     charge_id: o.order.charge_id,
@@ -407,8 +426,10 @@ const ringDevB = makeDevice('human', 'dev_ring_b')
 const ringNames = ['Jordan Mercer', 'J. Mercer', 'Jordan M.', 'Dana Mercer', 'Jo Mercer']
 const ringOrders: Order[] = []
 ringNames.forEach((name, i) => {
-  const c = makeCustomer({ id: `cus_ring_${i + 1}`, createdDaysAgo: rng.int(6, 40), name, address: ringAddr, devices: i % 2 === 0 ? [ringDevA] : [ringDevB, ringDevA], tags: [] })
-  const o = makeOrder({ customer: c, placedAt: daysAgo(rng.int(5, 30)), kind: 'human', lineCount: rng.int(1, 2), scenario: ['ring'] })
+  const createdAgo = rng.int(10, 40)
+  const c = makeCustomer({ id: `cus_ring_${i + 1}`, createdDaysAgo: createdAgo, name, address: ringAddr, devices: i % 2 === 0 ? [ringDevA] : [ringDevB, ringDevA], tags: [] })
+  // The order is placed after the account was created, and long enough ago to have been delivered before the INR claim.
+  const o = makeOrder({ customer: c, placedAt: daysAgo(rng.int(8, Math.max(8, createdAgo - 1))), kind: 'human', lineCount: rng.int(1, 2), scenario: ['ring'] })
   ringOrders.push(o)
   makeReturn({ order: o, kind: 'inr_claim', reason: 'item_not_received', claim_text: rng.pick(['Tracking says delivered but nothing arrived. Please refund or reship.', 'Package never showed up. Neighbors have not seen it either.', 'Marked delivered, not received. Refund requested.']), daysAfterDelivery: 1, inbound: 'none', refund: i < 2 ? 'instant' : 'pending', scenario: ['ring', 'inr'] })
 })
@@ -429,7 +450,7 @@ for (let i = 0; i < 5; i++) makeOrder({ customer: rng.pick(museUsers), placedAt:
 
 // Muse picked the wrong colour (Navy vs Midnight), honest return via the agent
 const wrongColorCus = rng.pick(museUsers)
-const wrongColor = makeOrder({ id: 'ord_muse_wrongcolor', customer: wrongColorCus, placedAt: daysAgo(12), kind: 'muse', lines: [line(jacket, { size: 'M', color: 'Midnight' })], scenario: ['agent_misread'] })
+const wrongColor = makeOrder({ id: 'ord_muse_wrongcolor', customer: wrongColorCus, placedAt: daysAgo(14), kind: 'muse', lines: [line(jacket, { size: 'M', color: 'Midnight' })], scenario: ['agent_misread'] })
 heroes.agent_misread_order = wrongColor.id
 makeReturn({ id: 'ret_muse_wrongcolor', order: wrongColor, reason: 'not_as_described', claim_text: 'I asked for the navy jacket and received a black one. Please exchange for Navy, size M.', via: 'agent', daysAfterDelivery: 2, refund: 'pending', scenario: ['agent_misread'] })
 

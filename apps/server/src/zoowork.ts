@@ -82,6 +82,8 @@ export type ToolExecutor = (name: string, input: Record<string, unknown>) => Pro
 
 export interface RunOptions {
   timeoutMs?: number
+  /** Aborting interrupts the session and makes runTurn throw; used when a case is reset mid-turn. */
+  signal?: AbortSignal
   onTool?: (name: string, input: Record<string, unknown>) => void
   onBuiltinTool?: (name: string) => void
   onText?: (text: string) => void
@@ -132,14 +134,19 @@ export async function runTurn(agentId: string, content: string, exec: ToolExecut
   }
 
   // The stream can close on idle; resume from the last cursor until the run finishes or we time out.
-  while (Date.now() < deadline) {
-    const signal = AbortSignal.timeout(Math.max(1_000, deadline - Date.now()))
+  while (Date.now() < deadline && !opts.signal?.aborted) {
+    const timeout = AbortSignal.timeout(Math.max(1_000, deadline - Date.now()))
+    const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout
     let finished = false
-    for await (const ev of zc.streamEvents(agentId, session.session_id, { cursor, signal })) {
-      if (await handleEvent(ev)) {
-        finished = true
-        break
+    try {
+      for await (const ev of zc.streamEvents(agentId, session.session_id, { cursor, signal })) {
+        if (await handleEvent(ev)) {
+          finished = true
+          break
+        }
       }
+    } catch (err) {
+      if (!signal.aborted) throw err // an abort falls through to the interrupt below
     }
     if (finished) return text
     if (signal.aborted) break
@@ -149,5 +156,5 @@ export async function runTurn(agentId: string, content: string, exec: ToolExecut
   } catch {
     /* best effort */
   }
-  throw new Error('ZooWork turn timed out')
+  throw new Error(opts.signal?.aborted ? 'ZooWork turn aborted' : 'ZooWork turn timed out')
 }

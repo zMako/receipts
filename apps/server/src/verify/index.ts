@@ -1,5 +1,5 @@
-export { default as verifyRouter, recentCheckouts, setBroadcaster, toObserved, type CheckoutObserved, type CheckoutRecord } from './router.js'
-export { verifyAgentRequest, verifySignedRequest, describeRequest, directoryOverrides, addLocalDirectoryResolver, directoryUrlFor, nonceStore, clearDirectoryCache, type VerifyFailureReason } from './webBotAuth.js'
-export { classifyRequest, readTelemetry, requestFingerprint, WEIGHTS, CLOUD_ASNS, POPULATION_THRESHOLD, MUSE_UA } from './classifyRequest.js'
+export { default as verifyRouter, recentCheckouts, resetVerifierState, setBroadcaster, toObserved, type CheckoutObserved, type CheckoutRecord } from './router.js'
+export { verifyAgentRequest, verifySignedRequest, describeRequest, requestScheme, directoryOverrides, addLocalDirectoryResolver, directoryUrlFor, nonceStore, clearDirectoryCache, type VerifyFailureReason } from './webBotAuth.js'
+export { classifyRequest, clearClassifierState, readTelemetry, requestFingerprint, WEIGHTS, CLOUD_ASNS, POPULATION_THRESHOLD, MUSE_UA } from './classifyRequest.js'
 export { ensureAgentKey, getAgentKey, jwksFor, listLocalAgents, KEY_STORE_PATH, type StoredAgentKey } from './keys.js'
 export { WEB_BOT_AUTH_TAGS, type WebBotAuthTag, type AgentIdentityResult, type CheckoutTelemetry, type Jwk } from './types.js'

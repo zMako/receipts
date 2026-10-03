@@ -23,7 +23,8 @@ warroomApi.post('/cases/open', async (req, res) => {
     const c = await openCase({ dispute_id: req.body?.dispute_id, return_id: req.body?.return_id })
     res.status(201).json({ case_id: c.id, kind: c.kind, order_id: c.order_id, room: c.events[0]?.type === 'case.opened' ? (c.events[0] as { room: unknown }).room : null })
   } catch (err) {
-    res.status(400).json({ error: (err as Error).message })
+    const msg = (err as Error).message
+    res.status(msg === 'case_running' ? 409 : 400).json({ error: msg })
   }
 })
 warroomApi.post('/cases/:id/submit', async (req, res) => {

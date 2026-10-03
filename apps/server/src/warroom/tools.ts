@@ -178,11 +178,12 @@ export async function executeTool(ctx: ToolContext, name: string, input: Record<
       const family = input.family as EvidenceFamily
       const allowed = FAMILIES_BY_ROLE[ctx.agent]
       if (!allowed.includes(family)) return { attached: null, rejected: `family "${family}" belongs to another specialist. You may only attach: ${allowed.join(', ')}. Skip this finding; the owning specialist covers it.` }
+      if (typeof input.label !== 'string' || !input.label.trim() || typeof input.detail !== 'string' || !input.detail.trim()) return { attached: null, rejected: 'label and detail are required' }
       const severity = (SEVERITIES.includes(input.severity as Severity) ? input.severity : 'info') as Severity
       const item = ctx.attach(ctx.agent, {
         family,
-        label: String(input.label).slice(0, 80),
-        detail: String(input.detail).slice(0, 600),
+        label: input.label.trim().slice(0, 80),
+        detail: input.detail.trim().slice(0, 600),
         severity,
         weight: clampWeight(severity, Number(input.weight)),
         node_ids: Array.isArray(input.node_ids) ? input.node_ids.map(String) : [ctx.orderId],

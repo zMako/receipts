@@ -30,6 +30,23 @@ export const WEIGHTS = {
 
 /** Live counterpart of the seed's per-fingerprint session counter: how many distinct customers share each fingerprint. */
 const fingerprintCustomers = new Map<string, Set<string>>()
+const MAX_FINGERPRINTS = 10_000
+const MAX_CUSTOMERS_PER_FINGERPRINT = 1000
+
+function recordCustomer(fp: string, customerId: string): void {
+  let set = fingerprintCustomers.get(fp)
+  if (!set) {
+    while (fingerprintCustomers.size >= MAX_FINGERPRINTS) fingerprintCustomers.delete(fingerprintCustomers.keys().next().value as string)
+    set = new Set<string>()
+    fingerprintCustomers.set(fp, set)
+  }
+  if (set.size < MAX_CUSTOMERS_PER_FINGERPRINT || set.has(customerId)) set.add(customerId)
+}
+
+/** Forget every fingerprint -> customers association (operator reset between demo runs). */
+export function clearClassifierState(): void {
+  fingerprintCustomers.clear()
+}
 
 function header(req: Request, name: string): string | undefined {
   const v = req.headers[name.toLowerCase()]
@@ -72,7 +89,7 @@ export function requestFingerprint(req: Request): string {
 }
 
 export interface ClassifyOptions {
-  /** Customer id from the checkout body; used only to count distinct customers per fingerprint. */
+  /** Customer id from a *validated* checkout body; used only to count distinct customers per fingerprint. Omit to classify without recording. */
   customerId?: string
   /** Payment instrument kind if the merchant already knows it (the vault scores single-use Link cards). */
   paymentKind?: string
@@ -98,7 +115,7 @@ export function classifyRequest(req: Request, opts: ClassifyOptions = {}): Agent
   const isChrome = /Chrome\/\d+/.test(ua) && !/Edg\/|OPR\//.test(ua)
   const linuxChrome = platform === 'Linux' && isChrome && (chUa === '' || /Chromium|Google Chrome/.test(chUa))
   const fp = requestFingerprint(req)
-  if (opts.customerId) fingerprintCustomers.set(fp, (fingerprintCustomers.get(fp) ?? new Set()).add(opts.customerId))
+  if (opts.customerId) recordCustomer(fp, opts.customerId)
   const shared = fingerprintCustomers.get(fp)?.size ?? 1
   if (linuxChrome) {
     const sameImage = ua === MUSE_UA ? 'identical to the Muse sandbox image' : 'headless-style Linux Chrome'

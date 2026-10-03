@@ -53,8 +53,9 @@ export async function startBandBridge(): Promise<Transport | null> {
         const msg = await me.client.nextMessage(room.id)
         if (!msg) return
         console.log(`[band] ${me.role} <- ${msg.sender_name}: ${msg.content.slice(0, 70).replace(/\n/g, ' ')}`)
-        await me.client.markProcessing(room.id, msg.id)
         try {
+          // A 409 (already processing after a restart) or a transient error must not stop us from marking it processed below.
+          await me.client.markProcessing(room.id, msg.id).catch((err: Error) => console.warn(`[band] ${me.role} markProcessing:`, err.message))
           const caseId = caseOf(msg)
           const from = byId.get(msg.sender_id)
           if (caseId && me.role === 'critic' && from && from !== 'critic') markReplied(caseId, from)

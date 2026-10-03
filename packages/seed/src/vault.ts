@@ -203,7 +203,8 @@ export class VaultBuilder {
     if (dev && refDev && dev.id === refDev.id && !dev.cluster) matched.push('customer_device_id')
     if (dev && refDev && dev.fingerprint === refDev.fingerprint && !dev.cluster) matched.push('customer_device_fingerprint')
     if (o.customer_id === ref.customer_id) matched.push('customer_account_id')
-    if (cust.email) matched.push('customer_email_address')
+    const refCust = this.customers.get(ref.customer_id)
+    if (refCust && cust.email && cust.email === refCust.email) matched.push('customer_email_address')
     if (o.shipping_address_id === ref.shipping_address_id) matched.push('shipping_address')
     return {
       charge: o.charge_id,
@@ -286,11 +287,13 @@ export class VaultBuilder {
     const dev = this.devices.get(o.session.device_id)
     const ce3Reason = cls.population === 'signed'
       ? 'Agent order: no human device or IP. Use TAP token, mandate and delivery proof instead.'
-      : dev?.cluster
+      : dev?.cluster?.endsWith('-sandbox')
         ? 'Device fingerprint is a shared agent sandbox image, not customer-identifying; CE 3.0 matching on device is invalid.'
-        : priors.length >= 2
-          ? `${priors.length} prior undisputed transactions 120 to 365 days old match on ${[...new Set(priors.flatMap((p) => p.matched_fields))].join(', ')}.`
-          : `Only ${priors.length} qualifying prior transaction(s); CE 3.0 needs two.`
+        : dev?.cluster === 'agent-runtime'
+          ? 'Agent runtime device, not customer-identifying; CE 3.0 device matching does not apply.'
+          : priors.length >= 2
+            ? `${priors.length} prior undisputed transactions 120 to 365 days old match on ${[...new Set(priors.flatMap((p) => p.matched_fields))].join(', ')}.`
+            : `Only ${priors.length} qualifying prior transaction(s); CE 3.0 needs two.`
     const disputed = this.ce3Transaction(o, o, refDate)
     const returns = this.returnsFor(o.id).map((r) => this.summarizeReturn(r))
     const history = this.history(o.customer_id, this.now)

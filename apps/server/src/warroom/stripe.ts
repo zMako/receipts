@@ -14,6 +14,7 @@ async function stripe<T>(path: string, body?: Record<string, string | number | u
   const key = process.env.STRIPE_SECRET_KEY
   if (!key) throw new Error('STRIPE_SECRET_KEY missing')
   const res = await fetch(`${STRIPE}${path}`, {
+    signal: AbortSignal.timeout(15_000),
     method: body ? 'POST' : 'GET',
     headers: { Authorization: 'Basic ' + Buffer.from(key + ':').toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body ? form(body) : undefined,
@@ -26,15 +27,17 @@ async function stripe<T>(path: string, body?: Record<string, string | number | u
 /** Build the Stripe dispute `evidence` hash from the vault. Strings only, as the API expects. */
 export function buildEvidencePackage(v: EvidenceVault, opts: { rationale: string; disputeReason: string }): Record<string, string> {
   const cust = data.customers.find((c) => c.id === v.customer_id)
-  const addr = data.addresses.find((a) => a.id === v.visa_compelling_evidence_3?.disputed_transaction.shipping_address.line1) ?? data.addresses.find((a) => a.name === cust?.name)
+  const order = data.orders.find((o) => o.id === v.order_id)
+  const addr = data.addresses.find((a) => a.id === order?.shipping_address_id) ?? data.addresses.find((a) => a.name === cust?.name)
   const refunded = v.returns.filter((r) => r.refund)
-  const shipAddr = v.visa_compelling_evidence_3?.disputed_transaction.shipping_address
+  const ce3Addr = v.visa_compelling_evidence_3?.disputed_transaction.shipping_address
+  const shipAddr = ce3Addr ?? (addr ? { line1: addr.line1, city: addr.city, state: addr.state, postal_code: addr.postal_code, country: addr.country } : undefined)
   const pkg: Record<string, string> = {
     product_description: v.lines.map((l) => `${l.name}${l.size ? ' ' + l.size : ''}${l.color ? ' ' + l.color : ''} x${l.qty} @ $${l.unit_price}`).join('; '),
     customer_name: v.customer_name,
     customer_email_address: v.confirmation_email.to,
     customer_purchase_ip: v.session.ip,
-    billing_address: shipAddr ? `${shipAddr.line1}, ${shipAddr.city}, ${shipAddr.state} ${shipAddr.postal_code}, ${shipAddr.country}` : (addr ? `${addr.line1}, ${addr.city}, ${addr.state} ${addr.postal_code}` : ''),
+    billing_address: shipAddr ? `${shipAddr.line1}, ${shipAddr.city}, ${shipAddr.state} ${shipAddr.postal_code}, ${shipAddr.country}` : '',
     shipping_address: shipAddr ? `${shipAddr.line1}, ${shipAddr.city}, ${shipAddr.state} ${shipAddr.postal_code}, ${shipAddr.country}` : '',
     shipping_carrier: v.delivery.carrier,
     shipping_tracking_number: v.delivery.tracking,
@@ -71,15 +74,13 @@ export interface StagedDispute {
 const TEXT_FIELDS = new Set(['product_description', 'customer_name', 'customer_email_address', 'customer_purchase_ip', 'billing_address', 'shipping_address', 'shipping_carrier', 'shipping_tracking_number', 'shipping_date', 'refund_policy_disclosure', 'refund_refusal_explanation', 'access_activity_log', 'uncategorized_text', 'cancellation_policy_disclosure', 'duplicate_charge_explanation', 'service_date', 'cancellation_rebuttal'])
 
 /**
- * Submit staged evidence (the merchant's approval click). Stripe test mode resolves a dispute as
- * won when the evidence text contains "winning_evidence", so strong representments demo end to end.
+ * Submit staged evidence (the merchant's approval click). Stripe's test harness resolves a dispute as
+ * won or lost when `evidence[uncategorized_text]` is exactly "winning_evidence" or "losing_evidence",
+ * so the marker is sent on its own; the narrative stays in the other text fields and in the local package.
  */
 export async function submitOnStripe(stripeDisputeId: string, opts: { testOutcome?: 'win' | 'lose' } = {}): Promise<{ id: string; status: string }> {
   const body: Record<string, string> = { submit: 'true' }
-  if (opts.testOutcome) {
-    const current = await stripe<{ evidence?: { uncategorized_text?: string } }>(`/disputes/${stripeDisputeId}`)
-    body['evidence[uncategorized_text]'] = `${current.evidence?.uncategorized_text ?? ''} ${opts.testOutcome === 'win' ? 'winning_evidence' : 'losing_evidence'}`.trim().slice(0, 20_000)
-  }
+  if (opts.testOutcome) body['evidence[uncategorized_text]'] = opts.testOutcome === 'win' ? 'winning_evidence' : 'losing_evidence'
   const updated = await stripe<{ id: string; status: string }>(`/disputes/${stripeDisputeId}`, body)
   return { id: updated.id, status: updated.status }
 }

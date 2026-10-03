@@ -28,7 +28,24 @@ export function broadcast(type: string, payload: unknown): void {
   for (const client of wss.clients) if (client.readyState === WebSocket.OPEN) client.send(msg)
 }
 
+/** Heartbeat: clients that vanish without a close frame (sleep, Wi-Fi switch) are terminated instead of buffering every broadcast. */
+const HEARTBEAT_MS = 30_000
+const alive = new WeakSet<WebSocket>()
+const heartbeat = setInterval(() => {
+  for (const client of wss.clients) {
+    if (!alive.has(client)) {
+      client.terminate()
+      continue
+    }
+    alive.delete(client)
+    client.ping()
+  }
+}, HEARTBEAT_MS)
+wss.on('close', () => clearInterval(heartbeat))
+
 wss.on('connection', (ws) => {
+  alive.add(ws)
+  ws.on('pong', () => alive.add(ws))
   const hello: LiveEvent = { type: 'hello', server_time: new Date().toISOString(), active_case: activeCase()?.id ?? null, merchant: data.merchant.name }
   ws.send(JSON.stringify({ type: hello.type, payload: hello, at: Date.now() }))
   // Late joiners get the active case replayed so the exhibit is never out of sync.

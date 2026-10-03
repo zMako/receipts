@@ -56,9 +56,11 @@ export type VerifyFailureReason =
 // ---------- nonce store ----------
 
 const nonces = new Map<string, number>()
+/** Hard cap on remembered nonces; beyond it the oldest claims are evicted (Map keeps insertion order). */
+export const MAX_NONCES = 50_000
 let lastSweep = 0
 function sweepNonces(now: number): void {
-  if (now - lastSweep < 30_000 && nonces.size < 5000) return
+  if (now - lastSweep < 30_000) return
   lastSweep = now
   for (const [k, exp] of nonces) if (exp <= now) nonces.delete(k)
 }
@@ -69,6 +71,8 @@ export const nonceStore = {
     const k = `${keyid}\n${nonce}`
     const seen = nonces.get(k)
     if (seen !== undefined && seen > nowMs) return false
+    if (seen !== undefined) nonces.delete(k)
+    while (nonces.size >= MAX_NONCES) nonces.delete(nonces.keys().next().value as string)
     nonces.set(k, expiresAtMs)
     return true
   },
@@ -92,8 +96,37 @@ export function addLocalDirectoryResolver(fn: DirectoryResolver): void {
 }
 
 const directoryCache = new Map<string, { jwks: JSONWebKeySet; fetched_at: number }>()
+/** Failed fetches are remembered briefly so a dead or slow directory does not cost a full timeout per request. */
+const directoryFailures = new Map<string, { reason: VerifyFailureReason; detail: string; at: number }>()
+const DIRECTORY_CACHE_MAX = 256
+const DIRECTORY_NEGATIVE_TTL_MS = 30_000
 export function clearDirectoryCache(): void {
   directoryCache.clear()
+  directoryFailures.clear()
+}
+
+function capMap(map: Map<string, unknown>): void {
+  while (map.size >= DIRECTORY_CACHE_MAX) map.delete(map.keys().next().value as string)
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])
+function isLoopbackHost(hostname: string): boolean {
+  return LOOPBACK_HOSTS.has(hostname) || /^127\./.test(hostname)
+}
+/** Literal private, link-local and unspecified addresses (IPv4 and IPv6). Names are not resolved here. */
+function isPrivateLiteralHost(hostname: string): boolean {
+  const h = hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  if (/^(10|0)\./.test(h) || /^192\.168\./.test(h) || /^169\.254\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h === '0.0.0.0') return true
+  if (h === '::' || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h) || /^::ffff:(10|0)\./.test(h) || /^::ffff:192\.168\./.test(h) || /^::ffff:169\.254\./.test(h) || /^::ffff:172\.(1[6-9]|2\d|3[01])\./.test(h)) return true
+  return false
+}
+/** Where we are willing to fetch a key directory from: https anywhere public, plain http only on loopback (dev). */
+function directoryFetchPolicy(agentUrl: URL): { reason: VerifyFailureReason; detail: string } | undefined {
+  const host = agentUrl.hostname
+  if (isLoopbackHost(host)) return undefined
+  if (isPrivateLiteralHost(host)) return { reason: 'directory_unreachable', detail: `${agentUrl.origin} is a private address; key directories must be publicly reachable` }
+  if (agentUrl.protocol !== 'https:') return { reason: 'directory_unreachable', detail: `${agentUrl.origin} must be served over https` }
+  return undefined
 }
 
 export function normalizeAgentUri(uri: string): string {
@@ -113,15 +146,24 @@ function isJwks(v: unknown): v is JSONWebKeySet {
 async function fetchDirectory(url: string, nowMs: number): Promise<{ jwks?: JSONWebKeySet; reason?: VerifyFailureReason; detail?: string }> {
   const hit = directoryCache.get(url)
   if (hit && nowMs - hit.fetched_at < DIRECTORY_TTL_MS) return { jwks: hit.jwks }
+  const failed = directoryFailures.get(url)
+  if (failed && nowMs - failed.at < DIRECTORY_NEGATIVE_TTL_MS) return { reason: failed.reason, detail: failed.detail }
+  const failure = (reason: VerifyFailureReason, detail: string) => {
+    capMap(directoryFailures)
+    directoryFailures.set(url, { reason, detail, at: nowMs })
+    return { reason, detail }
+  }
   try {
     const res = await fetch(url, { headers: { accept: 'application/http-message-signatures-directory+json, application/json' }, signal: AbortSignal.timeout(DIRECTORY_FETCH_TIMEOUT_MS) })
-    if (!res.ok) return { reason: 'directory_unreachable', detail: `${url} answered ${res.status}` }
+    if (!res.ok) return failure('directory_unreachable', `${url} answered ${res.status}`)
     const body: unknown = await res.json()
-    if (!isJwks(body)) return { reason: 'directory_malformed', detail: `${url} is not a JWK Set` }
+    if (!isJwks(body)) return failure('directory_malformed', `${url} is not a JWK Set`)
+    capMap(directoryCache)
     directoryCache.set(url, { jwks: body, fetched_at: nowMs })
+    directoryFailures.delete(url)
     return { jwks: body }
   } catch (e) {
-    return { reason: 'directory_unreachable', detail: `${url}: ${e instanceof Error ? e.message : String(e)}` }
+    return failure('directory_unreachable', `${url}: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -133,6 +175,8 @@ async function resolveDirectory(agentUri: URL, req: Request, nowMs: number): Pro
     const jwks = await r(agentUri, req)
     if (jwks) return { jwks }
   }
+  const blocked = directoryFetchPolicy(agentUri)
+  if (blocked) return blocked
   return fetchDirectory(directoryUrlFor(agentUri.href), nowMs)
 }
 
@@ -150,6 +194,16 @@ async function findKey(jwks: JSONWebKeySet, keyid: string): Promise<Jwk | undefi
 
 // ---------- request descriptor ----------
 
+/**
+ * The scheme the client signed against. Behind a TLS-terminating proxy (tunnel, PaaS) Express sees plain http unless
+ * 'trust proxy' is set, so honour X-Forwarded-Proto here; the signature still binds the authority, so a spoofed scheme
+ * only changes which @target-uri the signature has to match.
+ */
+export function requestScheme(req: Request): string {
+  const forwarded = headerString(req, 'x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase()
+  return forwarded === 'http' || forwarded === 'https' ? forwarded : req.protocol
+}
+
 export function describeRequest(req: Request): RequestDescriptor {
   const fields: FieldOccurrence[] = []
   for (const [name, value] of Object.entries(req.headers)) {
@@ -158,7 +212,7 @@ export function describeRequest(req: Request): RequestDescriptor {
     else fields.push({ name, value })
   }
   const host = req.get('host') ?? 'localhost'
-  return { kind: 'request', method: req.method, targetUri: `${req.protocol}://${host}${req.originalUrl}`, requestTarget: req.originalUrl, fields }
+  return { kind: 'request', method: req.method, targetUri: `${requestScheme(req)}://${host}${req.originalUrl}`, requestTarget: req.originalUrl, fields }
 }
 
 function headerString(req: Request, name: string): string | undefined {
@@ -323,13 +377,10 @@ export function verifyAgentRequest(opts: VerifyAgentOptions = {}): RequestHandle
   return (req: Request, _res: Response, next: NextFunction) => {
     verifySignedRequest(req, opts)
       .then((signed) => {
-        const body = (req.body ?? {}) as { customer_id?: unknown; payment_kind?: unknown }
-        req.agentIdentity =
-          signed ??
-          classifyRequest(req, {
-            customerId: typeof body.customer_id === 'string' ? body.customer_id : undefined,
-            paymentKind: typeof body.payment_kind === 'string' ? body.payment_kind : undefined,
-          })
+        // The body is not validated yet, so no customer id is recorded here; the checkout route re-classifies
+        // unsigned requests with the validated customer_id so fingerprint counts only reflect real checkouts.
+        const body = (req.body ?? {}) as { payment_kind?: unknown }
+        req.agentIdentity = signed ?? classifyRequest(req, { paymentKind: typeof body.payment_kind === 'string' ? body.payment_kind : undefined })
         next()
       })
       .catch((e: unknown) => {

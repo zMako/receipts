@@ -296,7 +296,20 @@ export function applyEvent(state: State, event: LiveEvent): State {
   return { ...next, seq: state.seq + 1, lastEvent: event }
 }
 
+/** Event types that are not scoped to one case and therefore never carry a `case_id` we check. */
+const UNSCOPED_EVENTS: ReadonlySet<string> = new Set(['hello', 'checkout.observed', 'case.opened', 'reset'])
+
+/** True when a case-scoped event belongs to a different case than the one on screen. */
+export function isForeignCaseEvent(state: State, event: LiveEvent): boolean {
+  if (!state.case || UNSCOPED_EVENTS.has(event.type)) return false
+  const caseId = (event as { case_id?: unknown }).case_id
+  return typeof caseId === 'string' && caseId !== state.case.case_id
+}
+
 function reduce(state: State, event: LiveEvent): State {
+  // Events from another case (a second war room opened elsewhere, or stragglers resumed after an
+  // offline replay) must never be merged into the case on screen.
+  if (isForeignCaseEvent(state, event)) return state
   switch (event.type) {
     case 'hello': {
       return { ...state, merchant: event.merchant ?? state.merchant, serverTime: event.server_time ?? null, activeCaseId: event.active_case ?? null }
@@ -313,14 +326,18 @@ function reduce(state: State, event: LiveEvent): State {
         signature_agent: sig?.signature_agent ?? null,
       }
       let graph = state.graph
+      let seed = state.seed
       const existing = graph.byId[event.order_id]
       if (existing) {
         graph = withDelta(graph, { nodes: [{ id: existing.id, type: existing.type as 'order', label: existing.label, population: event.population, flags: existing.flags }] })
       } else {
-        graph = withDelta(graph, { nodes: [{ id: event.order_id, type: 'order', label: event.order_id, population: event.population, flags: [] }] })
+        const node: GNode = { id: event.order_id, type: 'order', label: event.order_id, population: event.population, flags: [] }
+        graph = withDelta(graph, { nodes: [node] })
+        // A checkout is a real order, not case evidence: keep it in the seed so clearCase does not drop it.
+        seed = { nodes: [...seed.nodes, node], edges: seed.edges }
       }
       const text = `Checkout ${event.order_id} classified ${event.population} (score ${Number(event.score).toFixed(2)})${sig ? `, signature ${sig.verified ? 'verified' : 'rejected'} for ${sig.signature_agent}` : ''}`
-      return { ...state, graph, lastCheckout: checkout, highlights: lit(state.highlights, [event.order_id], 1), transcript: line(state, { kind: 'system', text }) }
+      return { ...state, graph, seed, lastCheckout: checkout, highlights: lit(state.highlights, [event.order_id], 1), transcript: line(state, { kind: 'system', text }) }
     }
 
     case 'case.opened': {

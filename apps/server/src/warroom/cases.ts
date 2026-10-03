@@ -3,7 +3,7 @@ import { data, vaultFor, vaults } from '../store.js'
 import { runTurn } from '../zoowork.js'
 import { AGENT_IDS } from './agents.js'
 import { buildEvidencePackage, stageOnStripe, submitOnStripe } from './stripe.js'
-import { executeTool, type ToolContext } from './tools.js'
+import { DECISIONS, TIERS, executeTool, type ToolContext } from './tools.js'
 
 export type Broadcast = (ev: LiveEvent) => void
 let broadcastFn: Broadcast = () => {}
@@ -50,6 +50,12 @@ export interface CaseRecord {
 
 const cases = new Map<string, CaseRecord>()
 const timers = new Map<string, NodeJS.Timeout[]>()
+/** One controller per open case; reset aborts the in-flight ZooWork turns so they stop billing and stop posting to Band. */
+const aborts = new Map<string, AbortController>()
+/** In-flight Stripe submissions, so a double click does not race two updates. */
+const submitting = new Map<string, Promise<{ status: string }>>()
+/** Closed cases kept in memory for GET /api/cases and the queue; older ones are evicted. */
+const MAX_CASES = 50
 let activeCaseId: string | null = null
 let seq = 0
 
@@ -60,6 +66,8 @@ export const activeCase = (): CaseRecord | null => (activeCaseId ? cases.get(act
 export function resetCases(): void {
   for (const ts of timers.values()) ts.forEach(clearTimeout)
   timers.clear()
+  for (const ac of aborts.values()) ac.abort()
+  aborts.clear()
   cases.clear()
   activeCaseId = null
   broadcastFn({ type: 'reset' })
@@ -72,6 +80,7 @@ function emit(c: CaseRecord, ev: LiveEvent): void {
 }
 
 function later(c: CaseRecord, ms: number, fn: () => void): void {
+  if (!cases.has(c.id)) return // case was reset while an await was pending
   const t = setTimeout(fn, ms)
   timers.set(c.id, [...(timers.get(c.id) ?? []), t])
 }
@@ -102,6 +111,8 @@ export async function openCase(input: { dispute_id?: string; return_id?: string 
     kind = 'return'
   } else throw new Error('dispute_id or return_id required')
   if (!orderId) throw new Error('unknown dispute or return')
+  const running = activeCase()
+  if (running && !running.closed_at) throw new Error('case_running')
   const vault = vaultFor(orderId)!
   const id = `case_${Date.now().toString(36)}_${++seq}`
   const c: CaseRecord = {
@@ -118,6 +129,7 @@ export async function openCase(input: { dispute_id?: string; return_id?: string 
     events: [],
   }
   cases.set(id, c)
+  aborts.set(id, new AbortController())
   activeCaseId = id
 
   const d = kind === 'dispute' ? vault.disputes.find((x) => x.id === input.dispute_id)! : undefined
@@ -201,7 +213,8 @@ function fallbackEvidence(role: AgentName, v: EvidenceVault): Omit<EvidenceItem,
   }
 }
 
-const words = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 3))
+/** Content words only: purely numeric tokens (years, amounts, minutes) are shared by unrelated findings. */
+const words = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 3 && !/^\d+$/.test(w)))
 function similar(a: string, b: string): boolean {
   const wa = words(a), wb = words(b)
   if (!wa.size || !wb.size) return false
@@ -211,7 +224,7 @@ function similar(a: string, b: string): boolean {
 }
 
 function attach(c: CaseRecord, agent: AgentName, item: Omit<EvidenceItem, 'id'>): EvidenceItem {
-  const dup = c.evidence.find((e) => e.family === item.family && (similar(e.label, item.label) || similar(e.detail, item.detail)))
+  const dup = c.evidence.find((e) => e.family === item.family && similar(e.label, item.label) && similar(e.detail, item.detail))
   if (dup) return { ...dup, id: `dup:${dup.id}` }
   const ev: EvidenceItem = { id: `ev_${c.evidence.length + 1}_${agent}`, ...item, node_ids: item.node_ids.length ? item.node_ids : [c.order_id] }
   c.evidence.push(ev)
@@ -228,23 +241,25 @@ export async function runSpecialist(caseId: string, role: AgentName): Promise<vo
   const ctx: ToolContext = { caseId, orderId: c.order_id, agent: role, attach: (a, item) => attach(c, a, item), verdict: () => ({ ok: false, error: 'not the critic' }), route: () => ({ ok: false, error: 'not the critic' }) }
   const prompt = `${brief(c)}\n\nYou are ${role}. Investigate with your tools, attach your findings, then reply to the Critic in at most two sentences.`
   let summary: string | undefined
-  const before = c.evidence.length
+  const mine = () => c.evidence.filter((e) => e.id.endsWith(`_${role}`))
   try {
     const agentId = AGENT_IDS.get(role)
     if (!agentId) throw new Error('agent not provisioned')
     summary = (await runTurn(agentId, prompt, (name, input) => executeTool(ctx, name, input), {
       timeoutMs: SPECIALIST_TIMEOUT_MS,
+      signal: aborts.get(caseId)?.signal,
       onTool: (name, input) => emit(c, { type: 'agent.status', case_id: c.id, agent: role, status: 'tool', detail: `${name}(${Object.values(input).map(String).join(', ').slice(0, 60)})` }),
     })).trim()
-    if (c.evidence.length === before) for (const item of fallbackEvidence(role, c.vault)) attach(c, role, item)
+    if (!cases.has(caseId)) return // reset while the turn was running
+    if (!mine().length) for (const item of fallbackEvidence(role, c.vault)) attach(c, role, item)
   } catch (err) {
+    if (!cases.has(caseId)) return // reset while the turn was running
     console.warn(`[warroom] ${role} failed on ${caseId}:`, (err as Error).message)
     emit(c, { type: 'agent.status', case_id: c.id, agent: role, status: 'error', detail: (err as Error).message })
-    if (c.evidence.length === before) for (const item of fallbackEvidence(role, c.vault)) attach(c, role, item)
-    const mine = c.evidence.filter((e) => e.id.endsWith(`_${role}`))
-    summary = mine.map((e) => e.label).join('. ') + '.'
+    if (!mine().length) for (const item of fallbackEvidence(role, c.vault)) attach(c, role, item)
+    summary = mine().map((e) => e.label).join('. ') + '.'
   }
-  if (!summary) summary = 'Findings attached.'
+  if (!summary) summary = mine().length ? mine().map((e) => e.label).join('. ') + '.' : 'Findings attached.'
   c.agents[role].summary = summary
   c.agents[role].status = 'done'
   emit(c, { type: 'agent.status', case_id: c.id, agent: role, status: 'posting' })
@@ -341,13 +356,16 @@ async function finishCase(caseId: string, why: string): Promise<void> {
     attach: (a, item) => attach(c, a, item),
     verdict: (input) => {
       if (c.verdict) return { ok: false, error: 'verdict already issued' }
-      c.verdict = { tier: input.tier, confidence: clamp(Number(input.confidence) || 0.5, 0, 1), score, rationale: input.rationale, policy_citation: input.policy_citation }
+      if (!TIERS.includes(input.tier)) return { ok: false, error: `tier must be one of ${TIERS.join(', ')}` }
+      if (typeof input.rationale !== 'string' || !input.rationale.trim()) return { ok: false, error: 'rationale is required' }
+      c.verdict = { tier: input.tier, confidence: clamp(Number(input.confidence) || 0.5, 0, 1), score, rationale: input.rationale.trim(), policy_citation: typeof input.policy_citation === 'string' ? input.policy_citation : undefined }
       emit(c, { type: 'verdict', case_id: c.id, ...c.verdict, evidence_ids: c.evidence.map((e) => e.id) })
       return { ok: true }
     },
     route: (input) => {
+      if (!DECISIONS.includes(input.decision)) return { ok: false, error: `decision must be one of ${DECISIONS.join(', ')}` }
       routingOverride = input.decision
-      routingRationale = input.rationale
+      routingRationale = typeof input.rationale === 'string' && input.rationale.trim() ? input.rationale.trim() : undefined
       return { ok: true }
     },
   }
@@ -357,12 +375,15 @@ async function finishCase(caseId: string, why: string): Promise<void> {
     if (!agentId) throw new Error('critic not provisioned')
     finalText = (await runTurn(agentId, prompt, (name, input) => executeTool(ctx, name, input), {
       timeoutMs: CRITIC_TIMEOUT_MS,
+      signal: aborts.get(caseId)?.signal,
       onTool: (name) => emit(c, { type: 'agent.status', case_id: c.id, agent: 'critic', status: 'tool', detail: name }),
     })).trim()
   } catch (err) {
+    if (!cases.has(caseId)) return // reset while the critic was running: no routing, no Stripe, no Band post
     console.warn(`[warroom] critic failed on ${caseId}:`, (err as Error).message)
     emit(c, { type: 'agent.status', case_id: c.id, agent: 'critic', status: 'error', detail: (err as Error).message })
   }
+  if (!cases.has(caseId)) return // reset while the critic was running
   if (!c.verdict) {
     const top = [...c.evidence].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)).slice(0, 3)
     c.verdict = { tier: suggested, confidence: 0.6, score, rationale: `Score ${score} from ${c.evidence.length} findings. Decisive: ${top.map((e) => e.label).join('; ')}.`, policy_citation: suggested === 'decline' ? `Return policy ${c.vault.policy_snapshot.version}` : undefined }
@@ -373,9 +394,16 @@ async function finishCase(caseId: string, why: string): Promise<void> {
     if (routingOverride && routingRationale) routing.rationale = routingRationale
     c.routing = routing
     emit(c, { type: 'dispute.routing', case_id: c.id, dispute_id: c.dispute_id!, ...routing })
-    if (routing.decision === 'representment') await stageEvidence(c)
+    if (routing.decision === 'representment') {
+      try {
+        await stageEvidence(c)
+      } catch (err) {
+        console.warn('[warroom] evidence staging failed:', (err as Error).message)
+      }
+    }
   }
   const closing = finalText || `Verdict: ${c.verdict.tier.replace(/_/g, ' ')}${c.routing ? `, ${c.routing.decision.replace(/_/g, ' ')} on ${c.dispute_id}` : ''}.`
+  if (!cases.has(caseId)) return // reset during Stripe staging
   let bandId: string | undefined
   if (transport) {
     try {
@@ -389,6 +417,18 @@ async function finishCase(caseId: string, why: string): Promise<void> {
   c.closed_at = new Date().toISOString()
   c.outcome = c.routing ? `${c.routing.decision}${c.stripe ? ' staged on Stripe; awaiting merchant approval' : ''}` : c.verdict.tier
   emit(c, { type: 'case.closed', case_id: c.id, outcome: c.outcome })
+  releaseCase(caseId)
+}
+
+/** A closed case needs no timers or abort controller; evict the oldest closed cases beyond MAX_CASES. */
+function releaseCase(caseId: string): void {
+  ;(timers.get(caseId) ?? []).forEach(clearTimeout)
+  timers.delete(caseId)
+  aborts.delete(caseId)
+  for (const [id, c] of cases) {
+    if (cases.size <= MAX_CASES) break
+    if (id !== activeCaseId && c.closed_at) cases.delete(id)
+  }
 }
 
 async function stageEvidence(c: CaseRecord): Promise<void> {
@@ -414,10 +454,21 @@ export async function submitCase(caseId: string): Promise<{ status: string }> {
   if (!c) throw new Error('case_not_found')
   if (!c.stripe?.stripe_dispute_id) throw new Error('nothing_staged_on_stripe')
   if (c.stripe.submitted) return { status: c.stripe.submitted.status }
-  const strong = (c.verdict?.confidence ?? 0) >= 0.8 && c.routing?.decision === 'representment'
-  const result = await submitOnStripe(c.stripe.stripe_dispute_id, { testOutcome: strong ? 'win' : undefined })
-  c.stripe.submitted = { at: new Date().toISOString(), status: result.status }
-  c.outcome = `submitted to Stripe (${result.status})`
-  emit(c, { type: 'stripe.submitted', case_id: c.id, dispute_id: c.dispute_id!, stripe_dispute_id: result.id, status: result.status, submitted_at: c.stripe.submitted.at, dashboard_url: c.stripe.dashboard_url })
-  return { status: result.status }
+  const inflight = submitting.get(caseId)
+  if (inflight) return inflight
+  const stripe = c.stripe
+  const run = (async () => {
+    // Test mode: a representment we chose to fight resolves as won, so the demo shows the payoff.
+    const result = await submitOnStripe(stripe.stripe_dispute_id!, { testOutcome: c.routing?.decision === 'representment' ? 'win' : undefined })
+    stripe.submitted = { at: new Date().toISOString(), status: result.status }
+    c.outcome = `submitted to Stripe (${result.status})`
+    emit(c, { type: 'stripe.submitted', case_id: c.id, dispute_id: c.dispute_id!, stripe_dispute_id: result.id, status: result.status, submitted_at: stripe.submitted.at, dashboard_url: stripe.dashboard_url })
+    return { status: result.status }
+  })()
+  submitting.set(caseId, run)
+  try {
+    return await run
+  } finally {
+    submitting.delete(caseId)
+  }
 }

@@ -187,6 +187,9 @@ export class ExhibitScene {
   private labelCount = 0
   private readonly onWindowResize = () => this.resize()
 
+  /** Called with the node id when the visitor clicks a node. */
+  onNodeSelect: ((id: string) => void) | null = null
+
   constructor(container: HTMLElement) {
     this.container = container
     this.geo = {
@@ -248,7 +251,11 @@ export class ExhibitScene {
       .linkOpacity(1)
       .linkMaterial((l) => this.linkMaterialOf(l))
       .enableNodeDrag(false)
-      .onNodeClick((n) => n && this.focusNeighbourhood(n.id))
+      .onNodeClick((n) => {
+        if (!n) return
+        this.focusNeighbourhood(n.id)
+        this.onNodeSelect?.(n.id)
+      })
       .warmupTicks(0)
       .cooldownTicks(0)
       .onEngineStop(() => this.onSettled())
@@ -397,6 +404,18 @@ export class ExhibitScene {
         changed = true
       }
     }
+    // Sandbox hubs carry their spoke count; refresh it as live orders attach.
+    if (changed) {
+      for (const [id, v] of this.visuals) {
+        const n = this.fgNodes.get(id)
+        if (!n || n.population !== 'cluster' || n.type !== 'device') continue
+        const text = this.hubLabel(n)
+        if (v.pinnedLabel !== text) {
+          v.pinnedLabel = text
+          this.setLabel(id, ACCENT.cluster, text)
+        }
+      }
+    }
     // Shared leaves carry a permanent label with how many accounts meet there.
     for (const [id, count] of leafAccounts) {
       const v = this.visuals.get(id)
@@ -519,18 +538,32 @@ export class ExhibitScene {
     // 3. The hub at the origin; shared leaves at the centroid of the orders they join; case leaves and
     //    satellites on a small ring around their order.
     const satIndex = new Map<string, number>()
+    const GOLDEN = Math.PI * (3 - Math.sqrt(5))
+    // Hubs take spiral slots in id order, but a hub that arrives later (a delta) gets the next free
+    // slot rather than its sorted index, which could be a slot an earlier hub already occupies.
     const hubs = all.filter((n) => n.population === 'cluster').sort((a, b) => a.id.localeCompare(b.id))
+    const hubSlot = new Map<string, number>()
+    let nextHub = hubs.filter((h) => !targetSet.has(h.id) && h.x !== undefined).length
+    for (const h of hubs) if (targetSet.has(h.id) || h.x === undefined) hubSlot.set(h.id, nextHub++)
+    // Orders without a customer edge (live checkouts) continue the customer spiral outwards.
+    const parented = new Set([...custOrders.values()].flat().map((o) => o.id))
+    let nextOrphan = customers.length + 3 + all.filter((n) => n.type === 'order' && !parented.has(n.id) && !targetSet.has(n.id) && n.x !== undefined).length
     for (const n of all) {
-      if (n.type === 'customer' || n.type === 'order') continue
+      if (n.type === 'customer' || (n.type === 'order' && parented.has(n.id))) continue
       if (!targetSet.has(n.id) && n.x !== undefined) continue
       if (n.population === 'cluster') {
-        const k = hubs.indexOf(n)
+        const k = hubSlot.get(n.id) ?? 0
         if (k <= 0) place(n, 0, 0)
         else {
-          const GOLDEN = Math.PI * (3 - Math.sqrt(5))
           const r = 30 * Math.sqrt(k)
           place(n, r * Math.cos(k * GOLDEN), r * Math.sin(k * GOLDEN))
         }
+        continue
+      }
+      if (n.type === 'order') {
+        const k = nextOrphan++
+        const r = 30 * Math.sqrt(k)
+        place(n, r * Math.cos(k * GOLDEN), r * Math.sin(k * GOLDEN))
         continue
       }
       const linkedOrders: FNode[] = []
@@ -627,13 +660,18 @@ export class ExhibitScene {
     this.visuals.set(n.id, { group, core, mat, outline, outlineMat, ring, radius: st.radius, label: null, pinnedLabel: null, targetOpacity: prevOpacity })
     if (n.type === 'device' && n.population === 'cluster') {
       const v = this.visuals.get(n.id)!
-      let spokes = 0
-      for (const l of this.fgLinks.values()) if (idOf(l.target) === n.id) spokes++
-      const name = n.label.replace(/\bmuse\b/i, 'Muse').replace(/\bdots\b/i, 'Dots')
-      v.pinnedLabel = `${name}, ${spokes} orders`
+      v.pinnedLabel = this.hubLabel(n)
       this.setLabel(n.id, ACCENT.cluster, v.pinnedLabel)
     }
     return group
+  }
+
+  /** "Muse-sandbox, 32 orders": the hub's name and how many orders currently spoke into it. */
+  private hubLabel(n: FNode): string {
+    let spokes = 0
+    for (const l of this.fgLinks.values()) if (idOf(l.target) === n.id) spokes++
+    const name = n.label.replace(/\bmuse\b/i, 'Muse').replace(/\bdots\b/i, 'Dots')
+    return `${name}, ${spokes} order${spokes === 1 ? '' : 's'}`
   }
 
   private restyle(n: FNode) {
@@ -653,6 +691,13 @@ export class ExhibitScene {
     const v = this.visuals.get(id)
     if (!v) return
     this.removeLabel(v)
+    // Dispose the per-node materials and empty the group before three-forcegraph's deallocate()
+    // walks it: that would call dispose() on the geometries shared by every other node.
+    for (const child of v.group.children) {
+      const m = (child as THREE.Mesh).material
+      if (m) (Array.isArray(m) ? m : [m]).forEach((x) => x.dispose())
+    }
+    v.group.clear()
     this.visuals.delete(id)
   }
 
@@ -978,7 +1023,8 @@ export class ExhibitScene {
     }
     const c = this.nodePos(orderId)
     if (!c || !pts.length) return
-    const customerPos = pts.find((p) => p !== c)
+    // nodePos() allocates, so compare by value; prefer the case customer when we know it.
+    const customerPos = (this.caseCustomerId && this.nodePos(this.caseCustomerId)) || pts.find((p) => !p.equals(c)) || null
     const centre = customerPos ? c.clone().lerp(customerPos, 0.5) : c
     let radius = 12
     for (const p of pts) radius = Math.max(radius, Math.hypot(p.x - centre.x, p.z - centre.z) + 8)
@@ -1102,7 +1148,7 @@ export class ExhibitScene {
     this.disposed = true
     window.removeEventListener('resize', this.onWindowResize)
     this.resizeObserver?.disconnect()
-    for (const v of this.visuals.values()) this.removeLabel(v)
+    for (const id of [...this.visuals.keys()]) this.dropVisual(id)
     for (const lm of this.linkMats.values()) lm.mat.dispose()
     this.linkMats.clear()
     try {
@@ -1110,5 +1156,12 @@ export class ExhibitScene {
     } catch {
       /* ignore */
     }
+    for (const g of Object.values(this.geo)) g.dispose()
+    const floorMat = this.floor.material as THREE.MeshBasicMaterial
+    floorMat.map?.dispose()
+    floorMat.dispose()
+    this.floor.geometry.dispose()
+    this.spotMat.dispose()
+    this.spot.geometry.dispose()
   }
 }

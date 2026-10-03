@@ -9,8 +9,8 @@ import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { PRODUCTS, type LiveEvent } from '@receipts/seed'
 import { jwksFor } from './keys.js'
-import { addLocalDirectoryResolver, verifyAgentRequest } from './webBotAuth.js'
-import { classifyRequest } from './classifyRequest.js'
+import { addLocalDirectoryResolver, clearDirectoryCache, requestScheme, verifyAgentRequest } from './webBotAuth.js'
+import { classifyRequest, clearClassifierState } from './classifyRequest.js'
 import type { AgentIdentityResult } from './types.js'
 
 export type CheckoutObserved = Extract<LiveEvent, { type: 'checkout.observed' }>
@@ -56,12 +56,12 @@ router.get('/agents/:name/.well-known/http-message-signatures-directory', (req, 
 router.get('/agents/:name', (req, res) => {
   const jwks = jwksFor(req.params.name)
   if (!jwks) return res.status(404).json({ error: 'unknown_agent', agent: req.params.name })
-  res.json({ agent: req.params.name, directory: `${req.protocol}://${req.get('host')}/agents/${req.params.name}/.well-known/http-message-signatures-directory`, keys: jwks.keys.length })
+  res.json({ agent: req.params.name, directory: `${requestScheme(req)}://${req.get('host')}/agents/${req.params.name}/.well-known/http-message-signatures-directory`, keys: jwks.keys.length })
 })
 
 const CheckoutBody = z.object({
   customer_id: z.string().min(1).max(64),
-  lines: z.array(z.object({ sku: z.string().min(1), qty: z.number().int().min(1).max(50), size: z.string().optional(), color: z.string().optional() })).min(1).max(20),
+  lines: z.array(z.object({ sku: z.string().min(1).max(32), qty: z.number().int().min(1).max(50), size: z.string().max(32).optional(), color: z.string().max(32).optional() })).min(1).max(20),
   telemetry: z.unknown().optional(),
   /** Optional merchant-side hint; the vault scores single-use Link cards. */
   payment_kind: z.string().optional(),
@@ -80,13 +80,18 @@ router.post('/api/checkout', verifyAgentRequest(), (req, res) => {
   const parsed = CheckoutBody.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'invalid_body', issues: parsed.error.issues })
   const body = parsed.data
-  const identity = req.agentIdentity ?? classifyRequest(req, { customerId: body.customer_id, paymentKind: body.payment_kind })
+  const unknown = body.lines.filter((l) => !PRODUCTS.some((x) => x.sku === l.sku)).map((l) => l.sku)
+  if (unknown.length) return res.status(400).json({ error: 'unknown_sku', skus: [...new Set(unknown)] })
+  // The middleware classifies before the body is validated and therefore never records the customer id;
+  // unsigned requests are classified again here so the per-fingerprint customer count only sees valid checkouts.
+  const signed = req.agentIdentity && (req.agentIdentity.verified || req.agentIdentity.reason) ? req.agentIdentity : undefined
+  const identity = signed ?? classifyRequest(req, { customerId: body.customer_id, paymentKind: body.payment_kind })
   const order_id = 'ord_live_' + randomBytes(3).toString('hex')
   const lines = body.lines.map((l) => {
-    const p = PRODUCTS.find((x) => x.sku === l.sku)
-    return { ...l, name: p?.name, price: p?.price }
+    const p = PRODUCTS.find((x) => x.sku === l.sku)!
+    return { ...l, name: p.name, price: p.price }
   })
-  const total = Math.round(lines.reduce((s, l) => s + (l.price ?? 0) * l.qty, 0) * 100) / 100
+  const total = Math.round(lines.reduce((s, l) => s + l.price * l.qty, 0) * 100) / 100
   const observed = toObserved(order_id, identity)
   const record: CheckoutRecord = { ...observed, customer_id: body.customer_id, placed_at: new Date().toISOString(), lines, total, identity }
   recentCheckouts.unshift(record)
@@ -100,8 +105,20 @@ router.post('/api/checkout', verifyAgentRequest(), (req, res) => {
 })
 
 router.get('/api/checkouts', (req, res) => {
-  const limit = Math.min(Number(req.query.limit ?? 100), MAX_RECENT)
+  const n = Number(req.query.limit)
+  const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), MAX_RECENT) : 100
   res.json(recentCheckouts.slice(0, limit))
 })
+
+/**
+ * Forget everything the verifier learned about live checkouts: recent orders, per-fingerprint customer counts and
+ * cached key directories. Nonces are deliberately kept: clearing them would re-enable replay of still-valid signatures.
+ * Wire this into the operator's reset path next to `resetCases()`.
+ */
+export function resetVerifierState(): void {
+  recentCheckouts.length = 0
+  clearClassifierState()
+  clearDirectoryCache()
+}
 
 export default router

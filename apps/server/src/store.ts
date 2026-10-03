@@ -31,6 +31,12 @@ export interface GraphEdge {
   type: 'placed' | 'used_device' | 'shipped_to' | 'paid_with' | 'returned' | 'disputed'
 }
 
+/** The graph node id for a session device: sandbox devices are merged into one `hub_<cluster>` node, everything else keeps its id. */
+export function graphDeviceId(deviceId: string): string {
+  const dev = data.devices.find((d) => d.id === deviceId)
+  return dev?.cluster && dev.cluster.endsWith('-sandbox') ? `hub_${dev.cluster}` : deviceId
+}
+
 let graphCache: { nodes: GraphNode[]; edges: GraphEdge[] } | null = null
 export function graph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
   if (graphCache) return graphCache
@@ -46,7 +52,7 @@ export function graph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
     if (dev) {
       // Every session of an agent sandbox shares one fingerprint, so the graph shows one hub per sandbox.
       const hub = dev.cluster && dev.cluster.endsWith('-sandbox')
-      const id = hub ? `hub_${dev.cluster}` : dev.id
+      const id = graphDeviceId(dev.id)
       put({ id, type: 'device', label: hub ? `${dev.cluster!.replace('-sandbox', '')} sandbox` : `${dev.browser} / ${dev.platform}`, population: hub ? 'cluster' : undefined })
       edges.push({ source: o.id, target: id, type: 'used_device' })
     }

@@ -5,8 +5,9 @@
  *   1. Only nodes that carry information are drawn: customers, orders, devices/addresses/cards that
  *      are SHARED between accounts (linkage), the Muse sandbox device, and the active case's
  *      returns, disputes and evidence nodes. Single-use leaves stay hidden.
- *   2. The layout is a tilted ground plane (y pinned to 0), not a sphere, so nodes never occlude
- *      each other and the camera always looks down at a map.
+ *   2. The layout is designed, not simulated: customers on a golden-angle spiral with their orders
+ *      ringed around them, linked accounts side by side, the Muse sandbox hub at the centre. Every
+ *      node sits on a floor with a contact shadow. Nothing moves after first paint except the camera.
  *   3. When a case opens, everything outside its two-hop neighbourhood fades to a ghost.
  *   4. Links are thin tubes; the case's links take the agent's colour as evidence lands.
  */
@@ -136,6 +137,21 @@ function shortLabel(n: FNode): string {
   return raw.length > 26 ? `${raw.slice(0, 25)}…` : raw
 }
 
+function makeRadialTexture(inner: string, outer: string): THREE.Texture {
+  const c = document.createElement('canvas')
+  c.width = c.height = 512
+  const ctx = c.getContext('2d')!
+  const g = ctx.createRadialGradient(256, 256, 0, 256, 256, 256)
+  g.addColorStop(0, inner)
+  g.addColorStop(0.75, outer)
+  g.addColorStop(1, outer)
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, 512, 512)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
 function leafNoun(type: NodeType): string {
   return type === 'device' ? 'device' : type === 'address' ? 'address' : 'card'
 }
@@ -153,6 +169,10 @@ export class ExhibitScene {
   private readonly css2d: CSS2DRenderer | null
   /** Ids that exist only because the active case touched them (evidence node_ids, satellites). */
   private readonly caseTouched = new Set<string>()
+  private readonly floor: THREE.Mesh
+  private readonly spot: THREE.Mesh
+  private readonly spotMat: THREE.MeshBasicMaterial
+  private spotTarget = 0
   private caseOrderId: string | null = null
   private caseCustomerId: string | null = null
   private focusSet: Set<string> | null = null
@@ -177,8 +197,23 @@ export class ExhibitScene {
       return: new THREE.TorusGeometry(1, 0.28, 10, 28),
       ring: new THREE.TorusGeometry(1, 0.05, 8, 56),
       outline: new THREE.SphereGeometry(1, 28, 20),
+      shadow: new THREE.CircleGeometry(1, 28),
     }
     this.fog = new THREE.Fog(CARD_BG, 300, 1100)
+
+    // A faint radial floor under the map and a spotlight disc that slides under the active case.
+    const floorTex = makeRadialTexture('#e9edf3', '#ffffff')
+    this.floor = new THREE.Mesh(new THREE.CircleGeometry(1, 96), new THREE.MeshBasicMaterial({ map: floorTex, transparent: true, depthWrite: false }))
+    this.floor.rotation.x = -Math.PI / 2
+    this.floor.position.y = -0.6
+    this.floor.scale.setScalar(320)
+    this.floor.renderOrder = -2
+    this.spotMat = new THREE.MeshBasicMaterial({ color: ACCENT.human, transparent: true, opacity: 0, depthWrite: false })
+    this.spot = new THREE.Mesh(new THREE.CircleGeometry(1, 64), this.spotMat)
+    this.spot.rotation.x = -Math.PI / 2
+    this.spot.position.y = -0.4
+    this.spot.renderOrder = -1
+    this.spot.visible = false
 
     let css2d: CSS2DRenderer | null = null
     try {
@@ -214,18 +249,13 @@ export class ExhibitScene {
       .linkMaterial((l) => this.linkMaterialOf(l))
       .enableNodeDrag(false)
       .onNodeClick((n) => n && this.focusNeighbourhood(n.id))
-      .d3AlphaDecay(0.028)
-      .d3VelocityDecay(0.42)
-      .warmupTicks(240)
+      .warmupTicks(0)
       .cooldownTicks(0)
       .onEngineStop(() => this.onSettled())
 
+    // Positions are authored, every node is pinned: the forces never run.
     const charge = graph.d3Force('charge')
-    if (charge && typeof charge.strength === 'function') charge.strength(-34)
-    const link = graph.d3Force('link')
-    if (link && typeof link.distance === 'function') link.distance((l: FLink) => (this.isHubLink(l) ? 120 : l.type === 'placed' ? 24 : 16))
-    // Spokes from the sandbox hub must not pull orders away from their customers.
-    if (link && typeof link.strength === 'function') link.strength((l: FLink) => (this.isHubLink(l) ? 0.002 : 0.6))
+    if (charge && typeof charge.strength === 'function') charge.strength(0)
 
     const key = new THREE.DirectionalLight(0xffffff, 1.6)
     key.position.set(0.6, 1.8, 0.9)
@@ -235,6 +265,7 @@ export class ExhibitScene {
 
     const scene = graph.scene()
     scene.fog = this.fog
+    scene.add(this.floor, this.spot)
 
     try {
       const renderer = graph.renderer()
@@ -267,7 +298,7 @@ export class ExhibitScene {
       })
     }
 
-    graph.cameraPosition({ x: 0, y: 300, z: 260 }, { x: 0, y: 0, z: 0 }, 0)
+    graph.cameraPosition({ x: 0, y: 330, z: 240 }, { x: 0, y: 0, z: 0 }, 0)
 
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.resize())
@@ -327,7 +358,7 @@ export class ExhibitScene {
       seen.add(n.id)
       const existing = this.fgNodes.get(n.id)
       if (!existing) {
-        const fn: FNode = { ...n, fy: 0 }
+        const fn: FNode = { ...n }
         this.fgNodes.set(n.id, fn)
         added.push(fn)
         changed = true
@@ -382,47 +413,10 @@ export class ExhibitScene {
       return
     }
 
-    if (first) {
-      // Seeded positions on the ground plane; the warm-up then runs synchronously so the first frame is settled.
-      for (const n of this.fgNodes.values()) {
-        const r = rng(hash(n.id))
-        const radius = 40 + Math.sqrt(r()) * 150
-        const theta = r() * Math.PI * 2
-        n.x = radius * Math.cos(theta)
-        n.y = 0
-        n.z = radius * Math.sin(theta)
-        if (n.population === 'cluster') {
-          // The shared sandbox sits at the centre of the map; its spokes radiate to every order it placed.
-          n.x = 0
-          n.z = 0
-          n.fx = 0
-          n.fz = 0
-        }
-      }
-      this.graph.warmupTicks(240).cooldownTicks(0)
-    } else {
-      // Place newcomers next to a neighbour so they do not fly in from the origin, then let only them settle.
-      for (const n of added) {
-        const r = rng(hash(n.id))
-        const nb: FNode[] = []
-        for (const l of this.fgLinks.values()) {
-          const s = idOf(l.source)
-          const t = idOf(l.target)
-          if (s === n.id) {
-            const o = this.fgNodes.get(t)
-            if (o && o.x !== undefined) nb.push(o)
-          } else if (t === n.id) {
-            const o = this.fgNodes.get(s)
-            if (o && o.x !== undefined) nb.push(o)
-          }
-        }
-        const c = nb.length ? nb.reduce((a, o) => a.add(new THREE.Vector3(o.x, 0, o.z)), new THREE.Vector3()).multiplyScalar(1 / nb.length) : new THREE.Vector3(0, 0, 0)
-        n.x = c.x + (r() - 0.5) * 22
-        n.y = 0
-        n.z = c.z + (r() - 0.5) * 22
-      }
-      this.graph.warmupTicks(0).cooldownTicks(this.settled ? 160 : 0)
-    }
+    // Designed layout: every node gets an authored, pinned position. New nodes slot in next to
+    // their parent order without touching anything else.
+    this.layout(first ? [...this.fgNodes.values()] : added)
+    this.graph.warmupTicks(0).cooldownTicks(0)
     try {
       this.graph.graphData({ nodes: [...this.fgNodes.values()], links: [...this.fgLinks.values()] })
     } catch (err) {
@@ -431,12 +425,135 @@ export class ExhibitScene {
     this.applyFocus()
   }
 
-  private onSettled() {
-    for (const n of this.fgNodes.values()) {
-      n.fx = n.x
-      n.fy = 0
-      n.fz = n.z
+  // ----- layout ---------------------------------------------------------------------------------
+
+  /**
+   * Customers sit on a golden-angle spiral, interesting ones (flags, agent orders, linked accounts)
+   * towards the centre and linked accounts adjacent; orders ring their customer; shared leaves sit at
+   * the centroid of the accounts they join; the sandbox hub is the origin; satellites ring their order.
+   */
+  private layout(targets: FNode[]) {
+    const all = [...this.fgNodes.values()]
+    const byId = this.fgNodes
+    const custOrders = new Map<string, FNode[]>()
+    const parentOf = new Map<string, string>()
+    for (const l of this.fgLinks.values()) {
+      const sId = idOf(l.source)
+      const tId = idOf(l.target)
+      const sN = byId.get(sId)
+      const tN = byId.get(tId)
+      if (!sN || !tN) continue
+      if (l.type === 'placed') custOrders.set(sId, [...(custOrders.get(sId) ?? []), tN])
+      else if (sN.type === 'order') parentOf.set(tId, sId)
     }
+    const targetSet = new Set(targets.map((n) => n.id))
+    const place = (n: FNode, x: number, z: number) => {
+      const r = this.styleOf(n).radius
+      n.x = x
+      n.z = z
+      n.y = r
+      n.fx = x
+      n.fz = z
+      n.fy = r
+    }
+
+    // 1. Customers, only when laying out from scratch (their spots never change afterwards).
+    const customers = all.filter((n) => n.type === 'customer')
+    if (customers.some((c) => targetSet.has(c.id))) {
+      // Union linked accounts through shared leaves so they land next to each other on the spiral.
+      const parent = new Map<string, string>()
+      const find = (a: string): string => {
+        let x = a
+        while (parent.get(x) && parent.get(x) !== x) x = parent.get(x)!
+        return x
+      }
+      for (const c of customers) parent.set(c.id, c.id)
+      const leafCustomers = new Map<string, string[]>()
+      for (const l of this.fgLinks.values()) {
+        const t = byId.get(idOf(l.target))
+        const o = byId.get(idOf(l.source))
+        if (!t || !o || o.type !== 'order' || !LEAF_TYPES.has(t.type) || t.population === 'cluster') continue
+        const owner = [...custOrders.entries()].find(([, os]) => os.some((x) => x.id === o.id))?.[0]
+        if (owner) leafCustomers.set(t.id, [...(leafCustomers.get(t.id) ?? []), owner])
+      }
+      for (const cs of leafCustomers.values()) for (let i = 1; i < cs.length; i++) parent.set(find(cs[i]), find(cs[0]))
+      const interest = (c: FNode) => {
+        const os = custOrders.get(c.id) ?? []
+        let score = 0
+        for (const o of os) {
+          if (o.population && o.population !== 'human') score += 2
+          score += (o.flags ?? []).filter((f) => f !== 'established_low_risk').length
+        }
+        if ((leafCustomers.size && [...leafCustomers.values()].some((cs) => cs.length >= 2 && cs.includes(c.id)))) score += 6
+        return score
+      }
+      const groups = new Map<string, FNode[]>()
+      for (const c of customers) groups.set(find(c.id), [...(groups.get(find(c.id)) ?? []), c])
+      const ordered = [...groups.values()]
+        .map((g) => ({ g, score: g.reduce((m, c) => Math.max(m, interest(c)), 0), tie: hash(g[0].id) }))
+        .sort((a, b) => b.score - a.score || a.tie - b.tie)
+        .flatMap((x) => x.g)
+      const GOLDEN = Math.PI * (3 - Math.sqrt(5))
+      ordered.forEach((c, i) => {
+        const k = i + 2 // leave the centre for the hub
+        const r = 27 * Math.sqrt(k)
+        const theta = k * GOLDEN
+        place(c, r * Math.cos(theta), r * Math.sin(theta))
+      })
+    }
+
+    // 2. Orders ring their customer.
+    for (const [cid, os] of custOrders) {
+      const c = byId.get(cid)
+      if (!c || c.x === undefined) continue
+      const sorted = [...os].sort((a, b) => a.id.localeCompare(b.id))
+      const ringR = sorted.length <= 3 ? 9 : sorted.length <= 8 ? 11.5 : 14.5
+      const rot = (hash(cid) % 360) * (Math.PI / 180)
+      sorted.forEach((o, i) => {
+        if (!targetSet.has(o.id) && o.x !== undefined) return
+        const a = rot + (i / sorted.length) * Math.PI * 2
+        place(o, c.x! + ringR * Math.cos(a), c.z! + ringR * Math.sin(a))
+      })
+    }
+
+    // 3. The hub at the origin; shared leaves at the centroid of the orders they join; case leaves and
+    //    satellites on a small ring around their order.
+    const satIndex = new Map<string, number>()
+    for (const n of all) {
+      if (n.type === 'customer' || n.type === 'order') continue
+      if (!targetSet.has(n.id) && n.x !== undefined) continue
+      if (n.population === 'cluster') {
+        place(n, 0, 0)
+        continue
+      }
+      const linkedOrders: FNode[] = []
+      for (const l of this.fgLinks.values()) {
+        if (idOf(l.target) !== n.id) continue
+        const o = byId.get(idOf(l.source))
+        if (o && o.x !== undefined) linkedOrders.push(o)
+      }
+      if (LEAF_TYPES.has(n.type) && linkedOrders.length >= 2) {
+        const cx = linkedOrders.reduce((a, o) => a + o.x!, 0) / linkedOrders.length
+        const cz = linkedOrders.reduce((a, o) => a + o.z!, 0) / linkedOrders.length
+        const r = rng(hash(n.id))
+        place(n, cx + (r() - 0.5) * 6, cz + (r() - 0.5) * 6)
+        continue
+      }
+      const parentId = parentOf.get(n.id) ?? linkedOrders[0]?.id
+      const o = parentId ? byId.get(parentId) : undefined
+      if (o && o.x !== undefined) {
+        const i = satIndex.get(o.id) ?? 0
+        satIndex.set(o.id, i + 1)
+        const a = (hash(o.id) % 360) * (Math.PI / 180) + Math.PI / 4 + i * (Math.PI / 2.4)
+        place(n, o.x + 8 * Math.cos(a), (o.z ?? 0) + 8 * Math.sin(a))
+      } else {
+        const r = rng(hash(n.id))
+        place(n, (r() - 0.5) * 40, (r() - 0.5) * 40)
+      }
+    }
+  }
+
+  private onSettled() {
     if (!this.settled) {
       this.settled = true
       if (this.caseOrderId) this.focusNeighbourhood(this.caseOrderId)
@@ -481,12 +598,19 @@ export class ExhibitScene {
     outline.visible = false
     const group = new THREE.Group()
     group.add(core, outline)
+    // Contact shadow on the floor: the node's centre sits at y = radius, so the floor is at -radius.
+    const shadow = new THREE.Mesh(this.geo.shadow, new THREE.MeshBasicMaterial({ color: 0x0f172a, transparent: true, opacity: 0.09, depthWrite: false }))
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.y = -st.radius + 0.25
+    shadow.scale.setScalar(st.radius * 1.15)
+    group.add(shadow)
     let ring: THREE.Mesh | null = null
     if (st.ring) {
       // A flat halo on the ground plane: flagged orders red, the sandbox device pink.
       ring = new THREE.Mesh(this.geo.ring, new THREE.MeshBasicMaterial({ color: st.ring, transparent: true, opacity: 0.8, depthWrite: false }))
       ring.scale.setScalar(st.radius * 1.9)
       ring.rotation.x = Math.PI / 2
+      ring.position.y = -st.radius + 0.5
       group.add(ring)
     }
     this.dropVisual(n.id)
@@ -731,6 +855,7 @@ export class ExhibitScene {
             this.mark([event.order_id, event.customer_id], color, { [event.customer_id]: event.customer_name })
             this.tintEdges([event.order_id, event.customer_id], '#94A3B8', { onlyBetween: true })
             this.focusNeighbourhood(event.order_id)
+            this.spotlight(event.order_id, color)
           })
           break
         }
@@ -775,6 +900,7 @@ export class ExhibitScene {
           this.pendingFocus = null
           this.clearHighlights()
           this.applyFocus()
+          this.spotTarget = 0
           break
         }
         default:
@@ -833,12 +959,32 @@ export class ExhibitScene {
     }
   }
 
+  /** A soft coloured disc on the floor under the case cluster. */
+  private spotlight(orderId: string, color: string) {
+    const pts: THREE.Vector3[] = []
+    for (const id of this.neighbours(orderId)) {
+      const p = this.nodePos(id)
+      if (p) pts.push(p)
+    }
+    const c = this.nodePos(orderId)
+    if (!c || !pts.length) return
+    const customerPos = pts.find((p) => p !== c)
+    const centre = customerPos ? c.clone().lerp(customerPos, 0.5) : c
+    let radius = 12
+    for (const p of pts) radius = Math.max(radius, Math.hypot(p.x - centre.x, p.z - centre.z) + 8)
+    this.spot.position.set(centre.x, -0.4, centre.z)
+    this.spot.scale.setScalar(radius)
+    this.spotMat.color.set(color)
+    this.spot.visible = true
+    this.spotTarget = 0.1
+  }
+
   focusOverview(): void {
     this.pauseOrbit(2.4)
     try {
       this.graph.zoomToFit(REDUCED_MOTION ? 0 : 1600, 50)
     } catch {
-      this.graph.cameraPosition({ x: 0, y: 300, z: 260 }, { x: 0, y: 0, z: 0 }, REDUCED_MOTION ? 0 : 1600)
+      this.graph.cameraPosition({ x: 0, y: 330, z: 240 }, { x: 0, y: 0, z: 0 }, REDUCED_MOTION ? 0 : 1600)
     }
   }
 
@@ -884,6 +1030,12 @@ export class ExhibitScene {
     }
 
     if (this.pendingFocus && this.nodePos(this.pendingFocus)) this.focusNeighbourhood(this.pendingFocus)
+
+    // Spotlight fade.
+    if (Math.abs(this.spotMat.opacity - this.spotTarget) > 0.001) {
+      this.spotMat.opacity = lerp(this.spotMat.opacity, this.spotTarget, k)
+      if (this.spotTarget === 0 && this.spotMat.opacity < 0.004) this.spot.visible = false
+    }
 
     // Focus fade: nodes and edges ease towards their target opacity.
     for (const v of this.visuals.values()) {

@@ -8,6 +8,8 @@
     "dev": "npm run dev -w apps/server",
     "exhibit": "npm run dev -w apps/exhibit",
     "verify": "npm run verify -w apps/server",
+    "agents": "cd apps/server && npx tsx scripts/agents/all.ts",
+    "seed": "npm run generate -w packages/seed",
     "typecheck": "tsc -b"
   },
   "engines": { "node": ">=20" }

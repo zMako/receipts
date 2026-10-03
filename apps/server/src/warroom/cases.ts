@@ -66,6 +66,7 @@ export function resetCases(): void {
 }
 
 function emit(c: CaseRecord, ev: LiveEvent): void {
+  if (!cases.has(c.id)) return // case was reset while an agent was still running
   c.events.push(ev)
   broadcastFn(ev)
 }

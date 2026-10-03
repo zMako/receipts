@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.11.3",
+  "checkpoint_id": "01M41S183GS76BMFZ2Q4Y7KZJ3",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/server/package.json",
+    "apps/server/src/index.ts",
+    "apps/server/src/routes.ts",
+    "apps/server/src/store.ts",
+    "package-lock.json",
+    "packages/seed/data/dataset.json",
+    "packages/seed/package.json",
+    "packages/seed/src/catalog.ts",
+    "packages/seed/src/generate.ts",
+    "packages/seed/src/index.ts",
+    "packages/seed/src/rng.ts",
+    "packages/seed/src/types.ts",
+    "packages/seed/src/vault.ts",
+    "packages/seed/tsconfig.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1646,
+    "cache_creation_tokens": 250582,
+    "cache_read_tokens": 10751859,
+    "output_tokens": 96418,
+    "api_call_count": 78
+  }
+}

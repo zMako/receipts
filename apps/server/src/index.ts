@@ -9,6 +9,7 @@ import { ensureWarRoomAgents } from './warroom/agents.js'
 import { startBandBridge } from './warroom/band-bridge.js'
 import { activeCase, setBroadcast } from './warroom/cases.js'
 import { readiness, warroomApi } from './warroom/routes.js'
+import { setBroadcaster, verifyRouter } from './verify/index.js'
 
 const app = express()
 app.use(express.json({ limit: '2mb' }))
@@ -16,6 +17,7 @@ app.use(express.json({ limit: '2mb' }))
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'receipts-server', ...readiness }))
 app.use('/api', api)
 app.use('/api', warroomApi)
+app.use(verifyRouter)
 
 const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/live' })
@@ -35,6 +37,7 @@ wss.on('connection', (ws) => {
 })
 
 setBroadcast((ev) => broadcast(ev.type, ev))
+setBroadcaster(broadcast)
 
 const port = Number(process.env.PORT ?? 8787)
 server.listen(port, () => console.log(`[receipts] server on http://localhost:${port}`))

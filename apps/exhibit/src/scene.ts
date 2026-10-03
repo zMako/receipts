@@ -1,8 +1,14 @@
 /**
- * The three.js evidence graph: a 3d-force-graph rendered as a restrained, matte, light-theme scene.
- * Pure presentation: reads State, reacts to LiveEvents. No bloom, particles or avatars; evidence
- * attaches scale the touched nodes briefly, tint their edges with the agent's colour, then settle
- * into a persistent outline plus a CSS2D label.
+ * The three.js evidence graph, rendered as a restrained, matte, light-theme scene.
+ *
+ * Reading hierarchy, in order:
+ *   1. Only nodes that carry information are drawn: customers, orders, devices/addresses/cards that
+ *      are SHARED between accounts (linkage), the Muse sandbox device, and the active case's
+ *      returns, disputes and evidence nodes. Single-use leaves stay hidden.
+ *   2. The layout is a tilted ground plane (y pinned to 0), not a sphere, so nodes never occlude
+ *      each other and the camera always looks down at a map.
+ *   3. When a case opens, everything outside its two-hop neighbourhood fades to a ghost.
+ *   4. Links are thin tubes; the case's links take the agent's colour as evidence lands.
  */
 import ForceGraph3D, { type ForceGraph3DInstance } from '3d-force-graph'
 import * as THREE from 'three'
@@ -38,21 +44,26 @@ interface NodeVisual {
   mat: THREE.MeshStandardMaterial
   outline: THREE.Mesh
   outlineMat: THREE.MeshBasicMaterial
+  ring: THREE.Mesh | null
   radius: number
   label: CSS2DObject | null
+  /** Permanent label (shared leaf, sandbox) that survives highlight clears. */
+  pinnedLabel: string | null
+  targetOpacity: number
 }
 
 /** Highlight timeline for a node: scale-up over 400ms, hold, settle into the persistent outline. */
 interface Mark {
   t0: number
   color: string
-  /** Label text override; the node's short label when undefined. */
   text?: string
 }
 
-interface LinkFx {
-  mat: THREE.LineBasicMaterial
-  t0: number
+interface LinkMat {
+  mat: THREE.MeshBasicMaterial
+  /** Set when an agent tinted the edge; undefined for a plain structural edge. */
+  fxT0?: number
+  targetOpacity: number
 }
 
 const CARD_BG = 0xffffff
@@ -61,19 +72,24 @@ const HOLD_S = 3.0
 const SETTLE_S = 0.4
 const PEAK_SCALE = 1.6
 const REST_SCALE = 1.12
-const EDGE_HOT = 0.9
-const EDGE_REST = 0.5
-const MAX_LABELS = 28
-/** OrbitControls: 2.0 is one revolution per 30s at 60fps; we want one per three minutes. */
-const ORBIT_SPEED = 2.0 * (30 / 180)
+const EDGE_HOT = 0.95
+const EDGE_REST = 0.6
+const EDGE_BASE = 0.55
+const EDGE_GHOST = 0.07
+const NODE_GHOST = 0.16
+const MAX_LABELS = 40
+/** OrbitControls: 2.0 is one revolution per 30s at 60fps; we want one per four minutes. */
+const ORBIT_SPEED = 2.0 * (30 / 240)
 const REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+const LEAF_TYPES: ReadonlySet<NodeType> = new Set(['device', 'address', 'payment'])
+const SATELLITE_TYPES: ReadonlySet<NodeType> = new Set(['return', 'dispute', 'evidence'])
 
 const NEUTRAL: Record<NodeType, string> = {
   customer: UI.neutralNode,
   order: ACCENT.human,
-  device: '#B9C2CF',
-  address: '#B9C2CF',
-  payment: '#B9C2CF',
+  device: '#94A3B8',
+  address: '#94A3B8',
+  payment: '#94A3B8',
   return: '#94A3B8',
   dispute: ACCENT.flagged,
   evidence: '#94A3B8',
@@ -104,6 +120,7 @@ function idOf(end: string | FNode | undefined): string {
 }
 
 const easeOut = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3)
+const lerp = (a: number, b: number, k: number) => a + (b - a) * k
 
 function darker(hex: string, k = 0.72): THREE.Color {
   return new THREE.Color(hex).multiplyScalar(k)
@@ -118,6 +135,10 @@ function shortLabel(n: FNode): string {
   return raw.length > 26 ? `${raw.slice(0, 25)}…` : raw
 }
 
+function leafNoun(type: NodeType): string {
+  return type === 'device' ? 'device' : type === 'address' ? 'address' : 'card'
+}
+
 export class ExhibitScene {
   readonly graph: ForceGraph3DInstance<FNode, FLink>
   private readonly container: HTMLElement
@@ -125,12 +146,15 @@ export class ExhibitScene {
   private readonly fgLinks = new Map<string, FLink>()
   private readonly visuals = new Map<string, NodeVisual>()
   private readonly marks = new Map<string, Mark>()
-  private readonly linkFx = new Map<string, LinkFx>()
+  private readonly linkMats = new Map<string, LinkMat>()
   private readonly geo: Record<string, THREE.BufferGeometry>
-  private readonly defaultLinkMat: THREE.LineBasicMaterial
   private readonly fog: THREE.Fog
   private readonly css2d: CSS2DRenderer | null
+  /** Ids that exist only because the active case touched them (evidence node_ids, satellites). */
+  private readonly caseTouched = new Set<string>()
   private caseOrderId: string | null = null
+  private caseCustomerId: string | null = null
+  private focusSet: Set<string> | null = null
   private pendingFocus: string | null = null
   private settled = false
   private t = 0
@@ -146,14 +170,13 @@ export class ExhibitScene {
     this.container = container
     this.geo = {
       sphere: new THREE.SphereGeometry(1, 28, 20),
-      device: new THREE.SphereGeometry(1, 16, 12),
-      address: new THREE.CylinderGeometry(1, 1, 0.28, 24),
+      leaf: new THREE.OctahedronGeometry(1, 0),
+      address: new THREE.CylinderGeometry(1, 1, 0.3, 24),
       payment: new THREE.BoxGeometry(1.5, 1.5, 1.5),
-      return: new THREE.TorusGeometry(1, 0.26, 10, 28),
-      ring: new THREE.TorusGeometry(1, 0.045, 8, 48),
+      return: new THREE.TorusGeometry(1, 0.28, 10, 28),
+      ring: new THREE.TorusGeometry(1, 0.05, 8, 56),
       outline: new THREE.SphereGeometry(1, 28, 20),
     }
-    this.defaultLinkMat = new THREE.LineBasicMaterial({ color: UI.edge, transparent: true, opacity: 0.35, depthWrite: false })
     this.fog = new THREE.Fog(CARD_BG, 300, 1100)
 
     let css2d: CSS2DRenderer | null = null
@@ -184,8 +207,9 @@ export class ExhibitScene {
       .nodeThreeObjectExtend(false)
       .linkSource('source')
       .linkTarget('target')
-      .linkWidth(0)
-      .linkOpacity(0.35)
+      .linkWidth((l) => this.linkWidthOf(l))
+      .linkResolution(5)
+      .linkOpacity(1)
       .linkMaterial((l) => this.linkMaterialOf(l))
       .enableNodeDrag(false)
       .onNodeClick((n) => n && this.focusNeighbourhood(n.id))
@@ -196,15 +220,15 @@ export class ExhibitScene {
       .onEngineStop(() => this.onSettled())
 
     const charge = graph.d3Force('charge')
-    if (charge && typeof charge.strength === 'function') charge.strength(-46)
+    if (charge && typeof charge.strength === 'function') charge.strength(-34)
     const link = graph.d3Force('link')
-    if (link && typeof link.distance === 'function') link.distance((l: FLink) => (l.type === 'placed' ? 26 : 18))
+    if (link && typeof link.distance === 'function') link.distance((l: FLink) => (l.type === 'placed' ? 24 : 16))
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.7)
-    key.position.set(1, 1.6, 1.2)
-    const fill = new THREE.DirectionalLight(0xffffff, 0.45)
-    fill.position.set(-1, -0.4, -1)
-    graph.lights([new THREE.HemisphereLight(0xffffff, 0xdfe5ee, 2.1), key, fill])
+    const key = new THREE.DirectionalLight(0xffffff, 1.6)
+    key.position.set(0.6, 1.8, 0.9)
+    const fill = new THREE.DirectionalLight(0xffffff, 0.4)
+    fill.position.set(-1, 0.6, -1)
+    graph.lights([new THREE.HemisphereLight(0xffffff, 0xdfe5ee, 2.2), key, fill])
 
     const scene = graph.scene()
     scene.fog = this.fog
@@ -226,6 +250,9 @@ export class ExhibitScene {
       controls.autoRotateSpeed = ORBIT_SPEED
       controls.maxDistance = 1400
       controls.minDistance = 30
+      // Always above the ground plane: between 20 and 72 degrees of elevation.
+      controls.minPolarAngle = 0.32
+      controls.maxPolarAngle = 1.22
       controls.addEventListener('start', () => {
         this.dragging = true
         controls.autoRotate = false
@@ -233,11 +260,11 @@ export class ExhibitScene {
       })
       controls.addEventListener('end', () => {
         this.dragging = false
-        this.resumeOrbitAt = this.t + 6
+        this.resumeOrbitAt = this.t + 8
       })
     }
 
-    graph.cameraPosition({ x: 0, y: 70, z: 440 }, { x: 0, y: 0, z: 0 }, 0)
+    graph.cameraPosition({ x: 0, y: 300, z: 260 }, { x: 0, y: 0, z: 0 }, 0)
 
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.resize())
@@ -246,21 +273,58 @@ export class ExhibitScene {
     window.addEventListener('resize', this.onWindowResize)
   }
 
+  // ----- what to show -------------------------------------------------------------------------
+
+  /**
+   * The subgraph worth drawing. Leaves are shown only when shared across accounts (or the sandbox
+   * cluster, or touched by the case); returns and disputes only for the case; delta nodes always.
+   */
+  private visibleSubgraph(state: State): { nodes: GNode[]; edges: State['graph']['edges']; leafAccounts: Map<string, number> } {
+    const g = state.graph
+    const customerOfOrder = new Map<string, string>()
+    for (const e of g.edges) if (e.type === 'placed') customerOfOrder.set(e.target, e.source)
+    const accountsByLeaf = new Map<string, Set<string>>()
+    const orderOfSatellite = new Map<string, string>()
+    for (const e of g.edges) {
+      const t = g.byId[e.target]
+      if (!t) continue
+      if (LEAF_TYPES.has(t.type)) {
+        const c = customerOfOrder.get(e.source)
+        if (c) accountsByLeaf.set(e.target, (accountsByLeaf.get(e.target) ?? new Set()).add(c))
+      } else if (SATELLITE_TYPES.has(t.type)) orderOfSatellite.set(e.target, e.source)
+    }
+    const leafAccounts = new Map<string, number>()
+    for (const [id, set] of accountsByLeaf) leafAccounts.set(id, set.size)
+
+    const visible = new Set<string>()
+    for (const n of g.nodes) {
+      if (n.delta || this.caseTouched.has(n.id)) visible.add(n.id)
+      else if (n.type === 'customer' || n.type === 'order') visible.add(n.id)
+      else if (LEAF_TYPES.has(n.type)) {
+        if (n.population === 'cluster' || (leafAccounts.get(n.id) ?? 0) >= 2) visible.add(n.id)
+        else if (this.caseOrderId && g.edges.some((e) => e.source === this.caseOrderId && e.target === n.id)) visible.add(n.id)
+      } else if (SATELLITE_TYPES.has(n.type)) {
+        if (this.caseOrderId && orderOfSatellite.get(n.id) === this.caseOrderId) visible.add(n.id)
+      }
+    }
+    return { nodes: g.nodes.filter((n) => visible.has(n.id)), edges: g.edges.filter((e) => visible.has(e.source) && visible.has(e.target)), leafAccounts }
+  }
+
   // ----- graph data ---------------------------------------------------------------------------
 
   /** Sync force-graph node/link objects with the reducer's graph. Objects are kept stable so layout survives. */
   setGraph(state: State): void {
     if (this.disposed) return
-    const g = state.graph
-    const first = this.fgNodes.size === 0 && g.nodes.length > 0
+    const { nodes, edges, leafAccounts } = this.visibleSubgraph(state)
+    const first = this.fgNodes.size === 0 && nodes.length > 0
     let changed = false
     const seen = new Set<string>()
     const added: FNode[] = []
-    for (const n of g.nodes) {
+    for (const n of nodes) {
       seen.add(n.id)
       const existing = this.fgNodes.get(n.id)
       if (!existing) {
-        const fn: FNode = { ...n }
+        const fn: FNode = { ...n, fy: 0 }
         this.fgNodes.set(n.id, fn)
         added.push(fn)
         changed = true
@@ -280,7 +344,7 @@ export class ExhibitScene {
       }
     }
     const linkSeen = new Set<string>()
-    for (const e of g.edges) {
+    for (const e of edges) {
       const key = `${e.source}>${e.target}:${e.type}`
       linkSeen.add(key)
       if (!this.fgLinks.has(key)) {
@@ -291,26 +355,39 @@ export class ExhibitScene {
     for (const key of [...this.fgLinks.keys()]) {
       if (!linkSeen.has(key)) {
         this.fgLinks.delete(key)
-        const fx = this.linkFx.get(key)
-        if (fx) {
-          fx.mat.dispose()
-          this.linkFx.delete(key)
+        const lm = this.linkMats.get(key)
+        if (lm) {
+          lm.mat.dispose()
+          this.linkMats.delete(key)
         }
         changed = true
       }
     }
-    if (!changed) return
+    // Shared leaves carry a permanent label with how many accounts meet there.
+    for (const [id, count] of leafAccounts) {
+      const v = this.visuals.get(id)
+      const n = this.fgNodes.get(id)
+      if (!v || !n || count < 2 || n.population === 'cluster') continue
+      const text = `${count} accounts, one ${leafNoun(n.type)}`
+      if (v.pinnedLabel !== text) {
+        v.pinnedLabel = text
+        this.setLabel(id, ACCENT.flagged, text)
+      }
+    }
+    if (!changed) {
+      this.applyFocus()
+      return
+    }
 
     if (first) {
-      // Seeded initial positions: the warm-up then runs synchronously so the first frame is settled.
+      // Seeded positions on the ground plane; the warm-up then runs synchronously so the first frame is settled.
       for (const n of this.fgNodes.values()) {
         const r = rng(hash(n.id))
-        const radius = 60 + r() * 120
+        const radius = 40 + Math.sqrt(r()) * 150
         const theta = r() * Math.PI * 2
-        const phi = Math.acos(2 * r() - 1)
-        n.x = radius * Math.sin(phi) * Math.cos(theta)
-        n.y = radius * Math.sin(phi) * Math.sin(theta) * 0.8
-        n.z = radius * Math.cos(phi)
+        n.x = radius * Math.cos(theta)
+        n.y = 0
+        n.z = radius * Math.sin(theta)
       }
       this.graph.warmupTicks(240).cooldownTicks(0)
     } else {
@@ -329,10 +406,10 @@ export class ExhibitScene {
             if (o && o.x !== undefined) nb.push(o)
           }
         }
-        const c = nb.length ? nb.reduce((a, o) => a.add(new THREE.Vector3(o.x, o.y, o.z)), new THREE.Vector3()).multiplyScalar(1 / nb.length) : new THREE.Vector3(0, 40, 0)
-        n.x = c.x + (r() - 0.5) * 24
-        n.y = c.y + (r() - 0.5) * 24 + 6
-        n.z = c.z + (r() - 0.5) * 24
+        const c = nb.length ? nb.reduce((a, o) => a.add(new THREE.Vector3(o.x, 0, o.z)), new THREE.Vector3()).multiplyScalar(1 / nb.length) : new THREE.Vector3(0, 0, 0)
+        n.x = c.x + (r() - 0.5) * 22
+        n.y = 0
+        n.z = c.z + (r() - 0.5) * 22
       }
       this.graph.warmupTicks(0).cooldownTicks(this.settled ? 160 : 0)
     }
@@ -341,22 +418,21 @@ export class ExhibitScene {
     } catch (err) {
       console.warn('[scene] graphData failed', err)
     }
+    this.applyFocus()
   }
 
   private onSettled() {
     for (const n of this.fgNodes.values()) {
       n.fx = n.x
-      n.fy = n.y
+      n.fy = 0
       n.fz = n.z
     }
     if (!this.settled) {
       this.settled = true
-      // First paint: frame the whole merchant, unless a case already asked for its neighbourhood.
       if (this.caseOrderId) this.focusNeighbourhood(this.caseOrderId)
       else {
         try {
-          // Instant: nothing is on screen yet, so an animated fit would only delay first paint.
-          this.graph.zoomToFit(0, 60)
+          this.graph.zoomToFit(0, 50)
         } catch {
           /* no nodes yet */
         }
@@ -366,44 +442,53 @@ export class ExhibitScene {
 
   // ----- node visuals -------------------------------------------------------------------------
 
-  private styleOf(n: FNode): { color: string; geo: THREE.BufferGeometry; radius: number; ring: boolean } {
-    if (n.type === 'device' && n.population === 'cluster') return { color: ACCENT.cluster, geo: this.geo.device, radius: 1.9, ring: true }
+  private styleOf(n: FNode): { color: string; geo: THREE.BufferGeometry; radius: number; ring: string | null } {
+    if (n.type === 'device' && n.population === 'cluster') return { color: ACCENT.cluster, geo: this.geo.sphere, radius: 2.6, ring: ACCENT.cluster }
     if (n.type === 'order') {
       const amount = Number(n.amount) || 120
-      const radius = Math.max(1.8, Math.min(4.4, 1.3 + 0.12 * Math.sqrt(amount)))
-      return { color: n.population ? populationOf(n.population).color : NEUTRAL.order, geo: this.geo.sphere, radius, ring: false }
+      const radius = Math.max(2.1, Math.min(4.8, 1.5 + 0.13 * Math.sqrt(amount)))
+      const flagged = (n.flags ?? []).some((f) => f !== 'established_low_risk' && f !== 'undeclared_agent' && f !== 'declared_unsigned_agent')
+      return { color: n.population ? populationOf(n.population).color : NEUTRAL.order, geo: this.geo.sphere, radius, ring: flagged ? ACCENT.flagged : null }
     }
-    if (n.type === 'customer') return { color: NEUTRAL.customer, geo: this.geo.sphere, radius: 3.3, ring: false }
-    if (n.type === 'device') return { color: NEUTRAL.device, geo: this.geo.device, radius: 1.3, ring: false }
-    if (n.type === 'address') return { color: NEUTRAL.address, geo: this.geo.address, radius: 1.7, ring: false }
-    if (n.type === 'payment') return { color: NEUTRAL.payment, geo: this.geo.payment, radius: 1.2, ring: false }
-    if (n.type === 'return') return { color: NEUTRAL.return, geo: this.geo.return, radius: 1.7, ring: false }
-    if (n.type === 'dispute') return { color: NEUTRAL.dispute, geo: this.geo.sphere, radius: 1.7, ring: false }
-    return { color: NEUTRAL.evidence, geo: this.geo.device, radius: 1.4, ring: false }
+    if (n.type === 'customer') return { color: NEUTRAL.customer, geo: this.geo.sphere, radius: 3.6, ring: null }
+    if (n.type === 'device') return { color: NEUTRAL.device, geo: this.geo.leaf, radius: 2.0, ring: null }
+    if (n.type === 'address') return { color: NEUTRAL.address, geo: this.geo.address, radius: 2.2, ring: null }
+    if (n.type === 'payment') return { color: NEUTRAL.payment, geo: this.geo.payment, radius: 1.5, ring: null }
+    if (n.type === 'return') return { color: NEUTRAL.return, geo: this.geo.return, radius: 1.9, ring: null }
+    if (n.type === 'dispute') return { color: NEUTRAL.dispute, geo: this.geo.sphere, radius: 2.0, ring: null }
+    return { color: NEUTRAL.evidence, geo: this.geo.leaf, radius: 1.6, ring: null }
   }
 
   private buildNode(n: FNode): THREE.Object3D {
     const st = this.styleOf(n)
-    const mat = new THREE.MeshStandardMaterial({ color: st.color, roughness: 0.9, metalness: 0 })
+    const mat = new THREE.MeshStandardMaterial({ color: st.color, roughness: 0.9, metalness: 0, transparent: true, opacity: 1 })
     const core = new THREE.Mesh(st.geo, mat)
     core.scale.setScalar(st.radius)
-    if (n.type === 'address') core.rotation.x = Math.PI / 2
-    if (n.type === 'return') core.rotation.x = Math.PI / 3
+    if (n.type === 'return') core.rotation.x = Math.PI / 2
     const outlineMat = new THREE.MeshBasicMaterial({ color: darker(st.color), side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false })
     const outline = new THREE.Mesh(this.geo.outline, outlineMat)
     outline.scale.setScalar(st.radius * 1.22)
     outline.visible = false
     const group = new THREE.Group()
     group.add(core, outline)
+    let ring: THREE.Mesh | null = null
     if (st.ring) {
-      const ring = new THREE.Mesh(this.geo.ring, new THREE.MeshBasicMaterial({ color: ACCENT.cluster, transparent: true, opacity: 0.85, depthWrite: false }))
-      ring.scale.setScalar(st.radius * 2.1)
-      ring.rotation.x = Math.PI / 2.6
-      ring.rotation.y = (hash(n.id) % 100) / 100
+      // A flat halo on the ground plane: flagged orders red, the sandbox device pink.
+      ring = new THREE.Mesh(this.geo.ring, new THREE.MeshBasicMaterial({ color: st.ring, transparent: true, opacity: 0.8, depthWrite: false }))
+      ring.scale.setScalar(st.radius * 1.9)
+      ring.rotation.x = Math.PI / 2
       group.add(ring)
     }
     this.dropVisual(n.id)
-    this.visuals.set(n.id, { group, core, mat, outline, outlineMat, radius: st.radius, label: null })
+    const prevOpacity = this.focusSet ? (this.focusSet.has(n.id) ? 1 : NODE_GHOST) : 1
+    mat.opacity = prevOpacity
+    if (ring) (ring.material as THREE.MeshBasicMaterial).opacity = 0.8 * prevOpacity
+    this.visuals.set(n.id, { group, core, mat, outline, outlineMat, ring, radius: st.radius, label: null, pinnedLabel: null, targetOpacity: prevOpacity })
+    if (n.type === 'device' && n.population === 'cluster') {
+      const v = this.visuals.get(n.id)!
+      v.pinnedLabel = 'Muse sandbox, shared by 37 orders'
+      this.setLabel(n.id, ACCENT.cluster, v.pinnedLabel)
+    }
     return group
   }
 
@@ -429,13 +514,14 @@ export class ExhibitScene {
 
   private nodePos(id: string, out = new THREE.Vector3()): THREE.Vector3 | null {
     const n = this.fgNodes.get(id)
-    if (!n || n.x === undefined || n.y === undefined || n.z === undefined || Number.isNaN(n.x)) return null
-    return out.set(n.x, n.y, n.z)
+    if (!n || n.x === undefined || n.z === undefined || Number.isNaN(n.x)) return null
+    return out.set(n.x, n.y ?? 0, n.z)
   }
 
   private tooltip(n: FNode): string {
     const pop = n.population ? populationOf(n.population) : null
-    return `<div class="gl-tip"><b>${escapeHtml(n.label)}</b> <span>· ${escapeHtml(n.type)}${n.amount ? ` · $${Number(n.amount).toFixed(0)}` : ''}</span>${pop ? `<br><span style="color:${pop.color}">${escapeHtml(pop.label)}</span>` : ''}${n.flags?.length ? `<br><span>${escapeHtml(n.flags.join(', ').replace(/_/g, ' '))}</span>` : ''}</div>`
+    const meta = [n.type, n.amount ? `$${Number(n.amount).toFixed(0)}` : ''].filter(Boolean).join(', ')
+    return `<div class="gl-tip"><b>${escapeHtml(n.label)}</b> <span>${escapeHtml(meta)}</span>${pop ? `<br><span style="color:${pop.color}">${escapeHtml(pop.label)}</span>` : ''}${n.flags?.length ? `<br><span>${escapeHtml(n.flags.join(', ').replace(/_/g, ' '))}</span>` : ''}</div>`
   }
 
   // ----- labels -------------------------------------------------------------------------------
@@ -456,7 +542,7 @@ export class ExhibitScene {
         v.label = obj
         this.labelCount++
       }
-      v.label.element.innerHTML = `<i style="background:${dotColor}"></i>${escapeHtml(text ?? shortLabel(n))}`
+      v.label.element.innerHTML = `<i style="background:${dotColor}"></i>${escapeHtml(text ?? v.pinnedLabel ?? shortLabel(n))}`
     } catch (err) {
       console.warn('[scene] label failed', err)
     }
@@ -474,22 +560,29 @@ export class ExhibitScene {
     this.labelCount = Math.max(0, this.labelCount - 1)
   }
 
-  // ----- highlights ---------------------------------------------------------------------------
+  // ----- highlights and focus -----------------------------------------------------------------
 
   private mark(ids: string[], color: string, labelOverride?: Record<string, string>) {
     for (const id of ids) {
       if (!this.fgNodes.has(id)) continue
       const existing = this.marks.get(id)
-      // Re-marking a node mid-animation restarts its timeline only if the previous attack is over.
       const text = labelOverride?.[id]
       if (!existing || this.t - existing.t0 > ATTACK_S) this.marks.set(id, { t0: this.t, color, text })
       else {
         existing.color = color
         if (text) existing.text = text
       }
-      // Delta nodes get their three.js object on the next digest; frame() attaches the label then.
       this.setLabel(id, color, text)
     }
+  }
+
+  private linkMatOf(key: string): LinkMat {
+    let lm = this.linkMats.get(key)
+    if (!lm) {
+      lm = { mat: new THREE.MeshBasicMaterial({ color: UI.edge, transparent: true, opacity: EDGE_BASE, depthWrite: false }), targetOpacity: EDGE_BASE }
+      this.linkMats.set(key, lm)
+    }
+    return lm
   }
 
   private tintEdges(ids: string[], color: string, opts: { onlyBetween?: boolean } = {}) {
@@ -501,26 +594,31 @@ export class ExhibitScene {
       const t = idOf(l.target)
       const hit = opts.onlyBetween ? set.has(s) && set.has(t) : set.has(s) || set.has(t)
       if (!hit) continue
-      const fx = this.linkFx.get(l.key)
-      if (fx) {
-        fx.mat.color.set(color)
-        fx.mat.opacity = EDGE_HOT
-        fx.t0 = this.t
-      } else {
-        this.linkFx.set(l.key, { mat: new THREE.LineBasicMaterial({ color, transparent: true, opacity: EDGE_HOT, depthWrite: false }), t0: this.t })
-      }
+      const lm = this.linkMatOf(l.key)
+      lm.mat.color.set(color)
+      lm.mat.opacity = EDGE_HOT
+      lm.fxT0 = this.t
       changed = true
     }
     if (changed) this.refreshLinks()
   }
 
   private linkMaterialOf(l: FLink): THREE.Material {
-    return this.linkFx.get(l.key)?.mat ?? this.defaultLinkMat
+    return this.linkMatOf(l.key).mat
+  }
+
+  private linkWidthOf(l: FLink): number {
+    const lm = this.linkMats.get(l.key)
+    if (lm?.fxT0 !== undefined) return 1.1
+    const s = idOf(l.source)
+    const t = idOf(l.target)
+    if (this.focusSet && this.focusSet.has(s) && this.focusSet.has(t)) return 0.7
+    return 0.45
   }
 
   private refreshLinks() {
     try {
-      this.graph.linkMaterial((l) => this.linkMaterialOf(l))
+      this.graph.linkMaterial((l) => this.linkMaterialOf(l)).linkWidth((l) => this.linkWidthOf(l))
     } catch (err) {
       console.warn('[scene] link refresh failed', err)
     }
@@ -535,9 +633,15 @@ export class ExhibitScene {
       v.outlineMat.opacity = 0
     }
     this.marks.clear()
-    for (const v of this.visuals.values()) this.removeLabel(v)
-    for (const fx of this.linkFx.values()) fx.mat.dispose()
-    this.linkFx.clear()
+    for (const [id, v] of this.visuals) {
+      if (v.pinnedLabel) this.setLabel(id, this.fgNodes.get(id)?.population === 'cluster' ? ACCENT.cluster : ACCENT.flagged, v.pinnedLabel)
+      else this.removeLabel(v)
+    }
+    for (const lm of this.linkMats.values()) {
+      lm.fxT0 = undefined
+      lm.mat.color.set(UI.edge)
+      lm.mat.opacity = EDGE_BASE
+    }
     this.refreshLinks()
   }
 
@@ -552,6 +656,38 @@ export class ExhibitScene {
     return [...out]
   }
 
+  /** Two hops around the case order plus everything the case touched; null when no case is open. */
+  private computeFocus(): Set<string> | null {
+    if (!this.caseOrderId) return null
+    const set = new Set<string>([this.caseOrderId])
+    if (this.caseCustomerId) set.add(this.caseCustomerId)
+    for (const id of this.neighbours(this.caseOrderId)) set.add(id)
+    for (const id of [...set]) for (const nb of this.neighbours(id)) set.add(nb)
+    for (const id of this.caseTouched) set.add(id)
+    for (const id of this.marks.keys()) set.add(id)
+    return set
+  }
+
+  /** Ghost everything outside the focus set. Opacities ease per frame towards their targets. */
+  private applyFocus() {
+    this.focusSet = this.computeFocus()
+    let widthChanged = false
+    for (const [id, v] of this.visuals) {
+      const target = this.focusSet ? (this.focusSet.has(id) ? 1 : NODE_GHOST) : 1
+      if (v.targetOpacity !== target) v.targetOpacity = target
+    }
+    for (const l of this.fgLinks.values()) {
+      const lm = this.linkMatOf(l.key)
+      const inFocus = !this.focusSet || (this.focusSet.has(idOf(l.source)) && this.focusSet.has(idOf(l.target)))
+      const target = lm.fxT0 !== undefined ? lm.targetOpacity : inFocus ? EDGE_BASE : EDGE_GHOST
+      if (lm.targetOpacity !== target) {
+        lm.targetOpacity = target
+        widthChanged = true
+      }
+    }
+    if (widthChanged) this.refreshLinks()
+  }
+
   // ----- events -------------------------------------------------------------------------------
 
   onEvent(event: LiveEvent, state: State): void {
@@ -560,9 +696,11 @@ export class ExhibitScene {
       switch (event.type) {
         case 'case.opened': {
           this.caseOrderId = event.order_id
+          this.caseCustomerId = event.customer_id
+          this.caseTouched.clear()
+          this.caseTouched.add(event.order_id).add(event.customer_id)
           this.clearHighlights()
           const color = populationOf(event.population).color
-          // Nodes may only exist after setGraph runs; mark and frame on the next frame.
           this.defer(() => {
             this.mark([event.order_id, event.customer_id], color, { [event.customer_id]: event.customer_name })
             this.tintEdges([event.order_id, event.customer_id], '#94A3B8', { onlyBetween: true })
@@ -575,9 +713,12 @@ export class ExhibitScene {
           if (!ev) break
           const color = AGENT_COLOR[event.agent] ?? AGENT_META[event.agent]?.color ?? UI.muted
           const ids = (ev.node_ids ?? []).filter((id): id is string => typeof id === 'string')
+          for (const id of ids) this.caseTouched.add(id)
+          for (const n of ev.graph?.nodes ?? []) this.caseTouched.add(n.id)
           this.defer(() => {
             this.mark(ids, color)
             this.tintEdges(ids, color)
+            this.applyFocus()
           })
           break
         }
@@ -587,23 +728,27 @@ export class ExhibitScene {
           for (const e of state.evidence) if (event.evidence_ids.includes(e.id)) for (const id of e.node_ids ?? []) ids.add(id)
           if (this.caseOrderId) {
             ids.add(this.caseOrderId)
-            this.setLabel(this.caseOrderId, color, `${this.fgNodes.get(this.caseOrderId)?.label ?? this.caseOrderId} · ${event.tier.replace(/_/g, ' ')}`)
+            this.setLabel(this.caseOrderId, color, `${this.fgNodes.get(this.caseOrderId)?.label ?? this.caseOrderId}: ${event.tier.replace(/_/g, ' ')}`)
           }
           this.tintEdges([...ids], color, { onlyBetween: true })
           break
         }
         case 'dispute.routing': {
+          this.caseTouched.add(event.dispute_id)
           this.defer(() => {
             if (!this.fgNodes.has(event.dispute_id)) return
-            this.mark([event.dispute_id], ACCENT.flagged, { [event.dispute_id]: `${event.dispute_id} · ${event.decision.replace(/_/g, ' ')}` })
+            this.mark([event.dispute_id], ACCENT.flagged, { [event.dispute_id]: `${event.dispute_id}: ${event.decision.replace(/_/g, ' ')}` })
             this.tintEdges([event.dispute_id], ACCENT.flagged)
           })
           break
         }
         case 'reset': {
           this.caseOrderId = null
+          this.caseCustomerId = null
+          this.caseTouched.clear()
           this.pendingFocus = null
           this.clearHighlights()
+          this.applyFocus()
           break
         }
         default:
@@ -627,7 +772,7 @@ export class ExhibitScene {
 
   // ----- camera -------------------------------------------------------------------------------
 
-  /** Frame a node and its 1-hop neighbourhood over 1.2s. Defers until the node has a position. */
+  /** Frame a node and its 1-hop neighbourhood from a fixed elevation. Defers until the node has a position. */
   focusNeighbourhood(id: string, ms = 1200): void {
     const center = this.nodePos(id)
     if (!center) {
@@ -642,16 +787,17 @@ export class ExhibitScene {
     }
     const c = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(1 / Math.max(1, pts.length))
     const centroid = c.lerp(center, 0.4)
-    let radius = 8
-    for (const p of pts) radius = Math.max(radius, p.distanceTo(centroid) + 4)
+    let radius = 10
+    for (const p of pts) radius = Math.max(radius, p.distanceTo(centroid) + 6)
     const cam = this.graph.camera() as THREE.PerspectiveCamera
     const fov = ((cam && 'fov' in cam ? cam.fov : 75) * Math.PI) / 180
-    const distance = Math.max(80, (radius / Math.tan(fov / 2)) * 1.25 + 30)
-    const dir = cam.position.clone().sub(centroid)
-    if (dir.length() < 1) dir.set(0.4, 0.3, 1)
-    dir.normalize()
-    dir.y = Math.max(dir.y, 0.22)
-    dir.normalize()
+    const distance = Math.max(90, (radius / Math.tan(fov / 2)) * 1.3 + 30)
+    // Keep the current azimuth, fix the elevation at about 50 degrees so the map stays readable.
+    const flat = new THREE.Vector3(cam.position.x - centroid.x, 0, cam.position.z - centroid.z)
+    if (flat.length() < 1) flat.set(0, 0, 1)
+    flat.normalize()
+    const elev = 0.87
+    const dir = new THREE.Vector3(flat.x * Math.cos(elev), Math.sin(elev), flat.z * Math.cos(elev))
     const pos = centroid.clone().add(dir.multiplyScalar(distance))
     this.pauseOrbit(ms / 1000 + 1.5)
     try {
@@ -664,9 +810,9 @@ export class ExhibitScene {
   focusOverview(): void {
     this.pauseOrbit(2.4)
     try {
-      this.graph.zoomToFit(REDUCED_MOTION ? 0 : 1600, 60)
+      this.graph.zoomToFit(REDUCED_MOTION ? 0 : 1600, 50)
     } catch {
-      this.graph.cameraPosition({ x: 0, y: 70, z: 440 }, { x: 0, y: 0, z: 0 }, REDUCED_MOTION ? 0 : 1600)
+      this.graph.cameraPosition({ x: 0, y: 300, z: 260 }, { x: 0, y: 0, z: 0 }, REDUCED_MOTION ? 0 : 1600)
     }
   }
 
@@ -694,24 +840,41 @@ export class ExhibitScene {
     dt = Math.min(0.1, Math.max(0, dt))
     this.t += dt
     const t = this.t
+    const k = 1 - Math.exp(-dt * 6)
 
     if (this.controls) {
       if (this.resumeOrbitAt !== null && t >= this.resumeOrbitAt && !this.dragging && !REDUCED_MOTION) {
         this.resumeOrbitAt = null
         this.controls.autoRotate = true
       }
-      // Light fog scaled to the viewing distance so depth reads at any zoom.
       try {
         const cam = this.graph.camera()
         const dist = cam.position.distanceTo(this.controls.target)
-        this.fog.near = dist * 0.8
-        this.fog.far = dist * 2.6
+        this.fog.near = dist * 0.9
+        this.fog.far = dist * 3.0
       } catch {
         /* ignore */
       }
     }
 
     if (this.pendingFocus && this.nodePos(this.pendingFocus)) this.focusNeighbourhood(this.pendingFocus)
+
+    // Focus fade: nodes and edges ease towards their target opacity.
+    for (const v of this.visuals.values()) {
+      if (Math.abs(v.mat.opacity - v.targetOpacity) > 0.002) {
+        v.mat.opacity = lerp(v.mat.opacity, v.targetOpacity, k)
+        if (v.ring) (v.ring.material as THREE.MeshBasicMaterial).opacity = 0.8 * v.mat.opacity
+        if (v.label) v.label.element.style.opacity = String(v.mat.opacity < 0.5 ? 0 : 1)
+      }
+    }
+    for (const lm of this.linkMats.values()) {
+      if (lm.fxT0 !== undefined) {
+        const age = t - lm.fxT0
+        if (age < HOLD_S) lm.mat.opacity = EDGE_HOT
+        else if (age < HOLD_S + SETTLE_S) lm.mat.opacity = EDGE_HOT + (EDGE_REST - EDGE_HOT) * easeOut((age - HOLD_S) / SETTLE_S)
+        else lm.mat.opacity = EDGE_REST
+      } else if (Math.abs(lm.mat.opacity - lm.targetOpacity) > 0.002) lm.mat.opacity = lerp(lm.mat.opacity, lm.targetOpacity, k)
+    }
 
     // Node highlight timelines: attack to 1.6x, hold, settle to a subtle persistent outline.
     for (const [id, m] of this.marks) {
@@ -722,16 +885,16 @@ export class ExhibitScene {
       let scale: number
       let outline: number
       if (age < ATTACK_S) {
-        const k = easeOut(age / ATTACK_S)
-        scale = 1 + (PEAK_SCALE - 1) * k
-        outline = 0.35 * k
+        const kk = easeOut(age / ATTACK_S)
+        scale = 1 + (PEAK_SCALE - 1) * kk
+        outline = 0.35 * kk
       } else if (age < HOLD_S) {
         scale = PEAK_SCALE
         outline = 0.35
       } else if (age < HOLD_S + SETTLE_S) {
-        const k = easeOut((age - HOLD_S) / SETTLE_S)
-        scale = PEAK_SCALE + (REST_SCALE - PEAK_SCALE) * k
-        outline = 0.35 + (0.55 - 0.35) * k
+        const kk = easeOut((age - HOLD_S) / SETTLE_S)
+        scale = PEAK_SCALE + (REST_SCALE - PEAK_SCALE) * kk
+        outline = 0.35 + (0.55 - 0.35) * kk
       } else {
         scale = REST_SCALE
         outline = 0.55
@@ -740,14 +903,6 @@ export class ExhibitScene {
       v.outline.scale.setScalar(v.radius * scale * 1.22)
       v.outline.visible = true
       v.outlineMat.opacity = outline
-    }
-
-    // Edge tints: agent colour at 0.9 for three seconds, then settle to a persistent half-tone.
-    for (const fx of this.linkFx.values()) {
-      const age = t - fx.t0
-      if (age < HOLD_S) fx.mat.opacity = EDGE_HOT
-      else if (age < HOLD_S + SETTLE_S) fx.mat.opacity = EDGE_HOT + (EDGE_REST - EDGE_HOT) * easeOut((age - HOLD_S) / SETTLE_S)
-      else fx.mat.opacity = EDGE_REST
     }
   }
 
@@ -760,8 +915,8 @@ export class ExhibitScene {
     window.removeEventListener('resize', this.onWindowResize)
     this.resizeObserver?.disconnect()
     for (const v of this.visuals.values()) this.removeLabel(v)
-    for (const fx of this.linkFx.values()) fx.mat.dispose()
-    this.linkFx.clear()
+    for (const lm of this.linkMats.values()) lm.mat.dispose()
+    this.linkMats.clear()
     try {
       this.graph._destructor()
     } catch {

@@ -157,9 +157,11 @@ export function createPanel(root: HTMLElement, handlers: PanelHandlers): Panel {
   }
 
   el.legend.innerHTML =
-    (['human', 'signed', 'declared', 'undeclared-suspected'] as const).map((k) => `<div><i style="background:${POPULATION[k].color}"></i>${POPULATION[k].label}</div>`).join('') +
-    `<div><i class="ring" style="--pink:${POPULATION.cluster.color}"></i>${POPULATION.cluster.label}</div>` +
-    `<div><i style="background:#CBD5E1"></i>Customer</div>`
+    `<div><i style="background:#CBD5E1"></i>Customer</div>` +
+    (['human', 'signed', 'declared', 'undeclared-suspected'] as const).map((k) => `<div><i style="background:${POPULATION[k].color}"></i>Order, ${POPULATION[k].label.toLowerCase()}</div>`).join('') +
+    `<div><i class="ring" style="--pink:${POPULATION.cluster.color}"></i>Muse sandbox device</div>` +
+    `<div><i class="ring" style="--pink:#EF4444"></i>Flagged order</div>` +
+    `<div><i class="leaf"></i>Shared device, address or card</div>`
 
   el.replay.addEventListener('click', () => handlers.onReplay())
   el.live.addEventListener('click', () => handlers.onLive())

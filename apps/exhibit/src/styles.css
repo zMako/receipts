@@ -731,6 +731,14 @@ a:hover {
   border: 2px solid var(--pink, #ec4899);
 }
 
+#stage-card .legend i.leaf {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background: #94a3b8;
+  transform: rotate(45deg);
+}
+
 .gl-tip {
   font: 12px/1.4 var(--font);
   color: var(--text);

@@ -1,0 +1,257 @@
+{
+  "cli_version": "0.11.3",
+  "checkpoint_id": "01M41ZGDFDJ7Q01SX7NQ64243W",
+  "session_id": "eef042f6-784b-443d-8d36-2b3ce897e58f",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-03T22:52:41.915405Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "model": "claude-fable-5-1",
+  "turn_id": "f7d53c4cd99d",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 4020,
+    "cache_creation_tokens": 636027,
+    "cache_read_tokens": 49243698,
+    "output_tokens": 327681,
+    "api_call_count": 168
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01686mZoP9G62Erz1EugLwes",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "anthropic-skills:pptx"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4b4f4ecc2ac9",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 36,
+        "end": 37,
+        "entry_ids": [
+          "c3d53159-c411-44d5-a31d-cda30f5cd6f9"
+        ],
+        "tool_use_id": "toolu_01686mZoP9G62Erz1EugLwes"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01686mZoP9G62Erz1EugLwes"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: anthropic-skills:pptx",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01GaC19JKQ4Cv3Az8Aiyv7ub",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "anthropic-skills:deep-research"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4b4f4ecc2ac9",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 107,
+        "end": 108,
+        "entry_ids": [
+          "7a51422c-174b-4874-aacd-af26ed318738"
+        ],
+        "tool_use_id": "toolu_01GaC19JKQ4Cv3Az8Aiyv7ub"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01GaC19JKQ4Cv3Az8Aiyv7ub"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: anthropic-skills:deep-research",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_0118FLFf8MGZJA9ggv4GkTDX",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "impeccable"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1344,
+        "end": 1345,
+        "entry_ids": [
+          "45b6f0ed-0571-463c-a8eb-a38353c745c8"
+        ],
+        "tool_use_id": "toolu_0118FLFf8MGZJA9ggv4GkTDX"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_0118FLFf8MGZJA9ggv4GkTDX"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: impeccable",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01457qQvaP1mQd61ErVibyVu",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "frontend-design"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1348,
+        "end": 1349,
+        "entry_ids": [
+          "3e8fe144-203f-4574-aae1-33c6816b3ac7"
+        ],
+        "tool_use_id": "toolu_01457qQvaP1mQd61ErVibyVu"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01457qQvaP1mQd61ErVibyVu"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: frontend-design",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01TeDrGVemrAoKfVdje7Snbj",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "design-taste-frontend"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1352,
+        "end": 1353,
+        "entry_ids": [
+          "64b387d1-940d-47fc-8ab8-1888edd00adc"
+        ],
+        "tool_use_id": "toolu_01TeDrGVemrAoKfVdje7Snbj"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01TeDrGVemrAoKfVdje7Snbj"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: design-taste-frontend",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_015oPvYyxKFAtpM9ChAGptbE",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "high-end-visual-design"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1356,
+        "end": 1357,
+        "entry_ids": [
+          "f371dd6e-9ca3-4229-bd43-17706e3f823a"
+        ],
+        "tool_use_id": "toolu_015oPvYyxKFAtpM9ChAGptbE"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_015oPvYyxKFAtpM9ChAGptbE"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: high-end-visual-design",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_019sNTdiykkoBWiC4isro3ZR",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "ui-ux-pro-max"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "59fe6adbb5b8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1360,
+        "end": 1361,
+        "entry_ids": [
+          "a28c1e93-b549-4dc0-969f-d5fa01bb68aa"
+        ],
+        "tool_use_id": "toolu_019sNTdiykkoBWiC4isro3ZR"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_019sNTdiykkoBWiC4isro3ZR"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: ui-ux-pro-max",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 13
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 7,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 7
+      }
+    }
+  ]
+}

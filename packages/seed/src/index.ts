@@ -11,3 +11,5 @@ export function loadDataset(): Dataset {
   const here = dirname(fileURLToPath(import.meta.url))
   return JSON.parse(readFileSync(resolve(here, '../data/dataset.json'), 'utf8')) as Dataset
 }
+export * from './events.js'
+export * from './replay.js'

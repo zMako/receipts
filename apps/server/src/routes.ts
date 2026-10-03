@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { REPLAYS } from '@receipts/seed'
 import { allVaults, data, graph, vaultFor, vaults } from './store.js'
 
 export const api = Router()
@@ -72,3 +73,9 @@ api.get('/disputes/:id', (req, res) => {
 })
 
 api.get('/graph', (_req, res) => res.json(graph()))
+
+api.get('/replay/:name', (req, res) => {
+  const fn = REPLAYS[req.params.name]
+  if (!fn) return res.status(404).json({ error: 'replay_not_found', available: Object.keys(REPLAYS) })
+  res.json(fn())
+})

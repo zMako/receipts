@@ -14,6 +14,8 @@
     "@zoowork-ai/sdk": "^0.10.2",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "http-message-sig": "^0.3.0",
+    "web-bot-auth": "^0.2.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },

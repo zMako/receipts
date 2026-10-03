@@ -8,3 +8,5 @@ dist/
 *.pptx
 .agents/
 .state/
+.claude/skills/*
+!.claude/skills/entire/

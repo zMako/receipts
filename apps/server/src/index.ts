@@ -48,11 +48,12 @@ wss.on('close', () => clearInterval(heartbeat))
 wss.on('connection', (ws) => {
   alive.add(ws)
   ws.on('pong', () => alive.add(ws))
-  const hello: LiveEvent = { type: 'hello', server_time: new Date().toISOString(), active_case: activeCase()?.id ?? null, merchant: data.merchant.name }
+  const hello: LiveEvent = { type: 'hello', server_time: new Date().toISOString(), active_case: (() => { const c = activeCase(); return c && !c.closed_at ? c.id : null })(), merchant: data.merchant.name }
   ws.send(JSON.stringify({ type: hello.type, payload: hello, at: Date.now() }))
   // Late joiners get the active case replayed so the exhibit is never out of sync.
+  // Late joiners only catch up on a case that is still running; a closed case stays in the queue.
   const c = activeCase()
-  if (c) for (const ev of c.events) ws.send(JSON.stringify({ type: ev.type, payload: ev, at: Date.now() }))
+  if (c && !c.closed_at) for (const ev of c.events) ws.send(JSON.stringify({ type: ev.type, payload: ev, at: Date.now() }))
 })
 
 setBroadcast((ev) => broadcast(ev.type, ev))
